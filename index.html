@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="KK Barbell">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="description" content="Barbell weight calculator, workout tracker & lift analytics">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+  <title>KK Barbell</title>
+</head>
+<body>
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- ==================== TAB: CALCULATOR ==================== -->
+  <section id="tab-calculator" class="tab-content">
+    <div class="calc-header">
+      <h1 class="logo"><span class="accent">KK</span> BARBELL</h1>
+    </div>
+
+    <!-- Visual Barbell -->
+    <div class="barbell-wrapper">
+      <div class="barbell">
+        <div class="collar collar-left"></div>
+        <div class="plates-side plates-left" id="platesLeft"></div>
+        <div class="bar-sleeve bar-sleeve-left"></div>
+        <div class="bar-center"></div>
+        <div class="bar-sleeve bar-sleeve-right"></div>
+        <div class="plates-side plates-right" id="platesRight"></div>
+        <div class="collar collar-right"></div>
+      </div>
+    </div>
+
+    <!-- Weight Display -->
+    <div class="weight-display">
+      <div class="total-weight-row">
+        <span class="total-weight" id="totalWeight">20</span>
+        <span class="unit-label" id="unitLabel">KG</span>
+      </div>
+      <div class="total-weight-row secondary">
+        <span class="total-weight-lb" id="totalWeightLb">44.09</span>
+        <span class="unit-label-lb">LB</span>
+      </div>
+      <div class="weight-breakdown" id="weightBreakdown">
+        Bar: 20kg &middot; Per side: 0kg &middot; 0 plates
+      </div>
+    </div>
+
+    <!-- Plate Buttons -->
+    <div class="plate-buttons" id="plateButtons"></div>
+
+    <!-- Action Buttons -->
+    <div class="action-buttons">
+      <button id="undoBtn" class="btn btn-secondary" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><polyline points="7 6 3 10 7 14"/></svg>
+        Undo
+      </button>
+      <button id="clearBtn" class="btn btn-danger">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Clear All
+      </button>
+    </div>
+
+    <!-- Settings -->
+    <div class="calc-settings">
+      <div class="setting-row">
+        <label>Bar Weight</label>
+        <div class="bar-weight-options" id="barWeightOptions"></div>
+      </div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-item">
+        <div class="stat-value" id="statTotalKg">20</div>
+        <div class="stat-label">Total KG</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="statTotalLb">44.09</div>
+        <div class="stat-label">Total LB</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="statPerSide">0</div>
+        <div class="stat-label">Per Side</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="statPlateCount">0</div>
+        <div class="stat-label">Plates</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== TAB: TRACKER ==================== -->
+  <section id="tab-tracker" class="tab-content active">
+    <!-- Week Timeline -->
+    <div class="section-header">
+      <h2>Workout Tracker</h2>
+    </div>
+    <div class="week-timeline" id="weekTimeline">
+      <button class="week-pill add-week" id="addWeekBtn" title="Add Week">+</button>
+    </div>
+
+    <!-- Upload Button -->
+    <div class="upload-area">
+      <button class="btn btn-primary btn-full" id="uploadBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload Workout
+      </button>
+    </div>
+
+    <!-- Day Tabs -->
+    <div class="day-tabs" id="dayTabs"></div>
+
+    <!-- Exercise List -->
+    <div class="exercise-list" id="exerciseList">
+      <div class="empty-state" id="trackerEmpty">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        <h3>No Workouts Yet</h3>
+        <p>Tap "Upload Workout" to import your training data</p>
+      </div>
+    </div>
+
+    <!-- Upload Modal -->
+    <div class="modal-overlay" id="uploadModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Upload Workout</h3>
+          <button class="modal-close" id="closeModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-hint">Paste your workout data below. Use the same format as your Google Sheet.</p>
+          <textarea id="workoutTextarea" placeholder="15/12/2025&#10;Tuesday&#10;Pause Bench Press&#9;Load&#9;Sets&#9;Reps&#10;2-count pause&#9;60&#9;6&#9;6&#10;&#10;Assisted Chin Up&#9;14p&#9;4&#9;8&#9;Easy" rows="12"></textarea>
+          <div class="modal-actions">
+            <div class="import-target">
+              <label>Import to:</label>
+              <div class="toggle-group" id="importTarget">
+                <button data-target="current" class="active">Current Week</button>
+                <button data-target="new">New Week</button>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-full" id="parseBtn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+              Parse &amp; Import
+            </button>
+          </div>
+        </div>
+        <!-- Parse Preview -->
+        <div class="parse-preview" id="parsePreview" style="display:none;">
+          <div class="preview-header">
+            <h4>Preview</h4>
+            <span class="preview-count" id="previewCount"></span>
+          </div>
+          <div class="preview-content" id="previewContent"></div>
+          <button class="btn btn-primary btn-full" id="confirmImport">Confirm Import</button>
+        </div>
+      </div>
+    </div>
+    <!-- Edit/Add Exercise Modal -->
+    <div class="modal-overlay" id="editModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="editModalTitle">Add Exercise</h3>
+          <button class="modal-close" id="closeEditModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="toggle-group edit-mode-toggle" id="editModeToggle">
+            <button data-mode="form" class="active">Form</button>
+            <button data-mode="paste">Paste</button>
+          </div>
+          <div id="editFormMode">
+            <div class="edit-field">
+              <label>Exercise Name</label>
+              <input type="text" id="editExName" class="edit-input" placeholder="e.g., Bench Press">
+            </div>
+            <div class="edit-field">
+              <label>Load</label>
+              <input type="text" id="editExLoad" class="edit-input" placeholder="e.g., 60, 30lb, 14p" inputmode="text">
+            </div>
+            <div class="edit-fields-row">
+              <div class="edit-field">
+                <label>Sets</label>
+                <input type="text" id="editExSets" class="edit-input" placeholder="Sets" inputmode="numeric">
+              </div>
+              <div class="edit-field">
+                <label>Reps</label>
+                <input type="text" id="editExReps" class="edit-input" placeholder="Reps" inputmode="text">
+              </div>
+            </div>
+            <div class="edit-field">
+              <label>Remarks</label>
+              <input type="text" id="editExRemarks" class="edit-input" placeholder="e.g., Easy, @9.5, slow eccentric">
+            </div>
+          </div>
+          <div id="editPasteMode" style="display:none;">
+            <textarea id="editPasteArea" class="edit-paste-area" placeholder="Paste tab-separated:&#10;Bench Press&#9;60&#9;5&#9;5&#9;Felt strong" rows="4"></textarea>
+          </div>
+          <button class="btn btn-primary btn-full" id="saveEditBtn">Save</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== TAB: NOTES ==================== -->
+  <section id="tab-notes" class="tab-content">
+    <div class="section-header">
+      <h2>Notes</h2>
+    </div>
+    <div class="notes-container">
+      <textarea id="notesTextarea" class="notes-textarea" placeholder="Write your workout notes here..."></textarea>
+    </div>
+    <div class="notes-status" id="notesStatus"></div>
+  </section>
+
+  <!-- ==================== TAB: ANALYTICS ==================== -->
+  <section id="tab-analytics" class="tab-content">
+    <div class="section-header">
+      <h2>Lift Analytics</h2>
+    </div>
+
+    <!-- Consistency Section -->
+    <div id="consistencySection" style="display:none;">
+      <div class="consistency-card">
+        <div class="consistency-header">
+          <h3>Consistency</h3>
+          <span class="consistency-rate" id="consistencyRate">--%</span>
+        </div>
+        <div class="consistency-grid" id="consistencyGrid"></div>
+        <div class="consistency-streak" id="consistencyStreak"></div>
+      </div>
+    </div>
+
+    <!-- Lift Selector -->
+    <div class="lift-selector" id="liftSelector">
+      <!-- Populated dynamically -->
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state" id="analyticsEmpty">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      <h3>No Data Yet</h3>
+      <p>Import workouts in the Tracker tab to see your lift progression here.</p>
+    </div>
+
+    <!-- Analytics Content (hidden until data exists) -->
+    <div id="analyticsContent" style="display:none;">
+      <!-- Progression Chart -->
+      <div class="chart-container">
+        <h3 class="chart-title" id="chartTitle">Progression</h3>
+        <canvas id="progressionChart"></canvas>
+      </div>
+
+      <!-- Volume Chart -->
+      <div class="chart-container">
+        <h3 class="chart-title">Volume Over Time</h3>
+        <canvas id="volumeChart"></canvas>
+      </div>
+
+      <!-- Stats Summary -->
+      <div class="analytics-stats" id="analyticsStats">
+        <div class="stat-card">
+          <div class="stat-value" id="currentMax">--</div>
+          <div class="stat-label">Current Load</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="totalVolume">--</div>
+          <div class="stat-label">Total Volume</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="progression">--</div>
+          <div class="stat-label">Progression</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="sessionCount">--</div>
+          <div class="stat-label">Sessions</div>
+        </div>
+      </div>
+
+      <!-- History Table -->
+      <div class="history-section">
+        <h3 class="chart-title">Recent History</h3>
+        <div class="history-table" id="historyTable"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== BOTTOM TAB BAR ==================== -->
+  <nav class="tab-bar">
+    <button class="tab-btn" data-tab="calculator">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="6" width="20" height="3" rx="1.5"/>
+        <rect x="5" y="4" width="3" height="7" rx="0.5"/>
+        <rect x="16" y="4" width="3" height="7" rx="0.5"/>
+        <rect x="9" y="5" width="2" height="5" rx="0.5"/>
+        <rect x="13" y="5" width="2" height="5" rx="0.5"/>
+      </svg>
+      <span>Calculator</span>
+    </button>
+    <button class="tab-btn active" data-tab="tracker">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+      </svg>
+      <span>Tracker</span>
+    </button>
+    <button class="tab-btn" data-tab="notes">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      <span>Notes</span>
+    </button>
+    <button class="tab-btn" data-tab="analytics">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      <span>Analytics</span>
+    </button>
+  </nav>
+
+  <script src="app.js"></script>
+  <script src="calculator.js"></script>
+  <script src="tracker.js"></script>
+  <script src="analytics.js"></script>
+</body>
+</html>

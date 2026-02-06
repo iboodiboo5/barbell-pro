@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sw_vers:*)",
+      "Bash(node -e:*)",
+      "Bash(node:*)",
+      "Bash(file:*)",
+      "WebFetch(domain:localhost)"
+    ]
+  }
+}
