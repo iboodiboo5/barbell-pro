@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kk-barbell-v5';
+const CACHE_NAME = 'kk-barbell-v7';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -17,7 +17,6 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting())
   );
 });
 
@@ -29,6 +28,13 @@ self.addEventListener('activate', event => {
       )
     ).then(() => self.clients.claim())
   );
+});
+
+// Listen for skip waiting message from client
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', event => {

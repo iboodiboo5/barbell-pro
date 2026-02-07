@@ -84,14 +84,55 @@ const Tracker = {
   },
 
   // --- Modal ---
+  _lastFocusedElement: null,
+  _focusTrapHandler: null,
+
   openModal() {
-    document.getElementById('uploadModal').classList.add('active');
+    this._lastFocusedElement = document.activeElement;
+    const modal = document.getElementById('uploadModal');
+    modal.classList.add('active');
     document.getElementById('workoutTextarea').value = '';
     document.getElementById('parsePreview').style.display = 'none';
+    setTimeout(() => document.getElementById('workoutTextarea').focus(), 300);
+    this._trapFocus(modal);
   },
 
   closeModal() {
-    document.getElementById('uploadModal').classList.remove('active');
+    const overlay = document.getElementById('uploadModal');
+    overlay.classList.add('closing');
+    setTimeout(() => overlay.classList.remove('active', 'closing'), 250);
+    this._releaseFocus();
+  },
+
+  _trapFocus(container) {
+    this._focusTrapHandler = (e) => {
+      if (e.key !== 'Tab') return;
+      const focusable = container.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', this._focusTrapHandler);
+  },
+
+  _releaseFocus() {
+    if (this._focusTrapHandler) {
+      document.removeEventListener('keydown', this._focusTrapHandler);
+      this._focusTrapHandler = null;
+    }
+    if (this._lastFocusedElement) {
+      this._lastFocusedElement.focus();
+      this._lastFocusedElement = null;
+    }
   },
 
   // --- Parser ---
@@ -492,6 +533,8 @@ const Tracker = {
 
     const exerciseCount = this._parsedDays.reduce((sum, d) => sum + d.exercises.length, 0);
     Toast.show(`Imported ${this._parsedDays.length} day${this._parsedDays.length !== 1 ? 's' : ''}, ${exerciseCount} exercises`);
+    Haptics.success();
+    Sound.importSuccess();
     this._parsedDays = null;
   },
 
@@ -665,7 +708,7 @@ const Tracker = {
             <button class="kebab-btn" data-exercise-index="${i}" aria-label="More options">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
             </button>
-            <button class="complete-toggle ${ex.completed ? 'checked' : ''}" data-exercise-index="${i}"></button>
+            <button class="complete-toggle ${ex.completed ? 'checked' : ''}" data-exercise-index="${i}" aria-label="${ex.completed ? 'Mark incomplete' : 'Mark complete'}"></button>
           </div>
         </div>
         <div class="exercise-details">
@@ -677,7 +720,7 @@ const Tracker = {
           ${(ex.remarks || []).map((r, ri) =>
             `<span class="remark-tag" data-remark-index="${ri}">${Utils.escapeHtml(r)}</span>`
           ).join('')}
-          <button class="remark-add-btn" data-exercise-index="${i}" title="Add remark">+</button>
+          <button class="remark-add-btn" data-exercise-index="${i}" title="Add remark" aria-label="Add remark">+</button>
         </div>
         ${ex.youtubeUrl ? `<a class="exercise-link" href="${Utils.escapeHtml(ex.youtubeUrl)}" target="_blank" rel="noopener">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/><polygon fill="white" points="9.545 15.568 15.818 12 9.545 8.432"/></svg>
@@ -695,9 +738,17 @@ const Tracker = {
       btn.addEventListener('click', e => {
         e.stopPropagation();
         const idx = parseInt(btn.dataset.exerciseIndex);
-        day.exercises[idx].completed = !day.exercises[idx].completed;
+        const newState = !day.exercises[idx].completed;
+        day.exercises[idx].completed = newState;
         this.saveData();
         this.renderExercises();
+        if (newState) {
+          Haptics.success();
+          Sound.exerciseComplete();
+        } else {
+          Haptics.light();
+          Sound.exerciseUncomplete();
+        }
       });
     });
 
@@ -879,10 +930,7 @@ const Tracker = {
 
     card.querySelector('.btn-confirm-delete').addEventListener('click', e => {
       e.stopPropagation();
-      day.exercises.splice(exerciseIndex, 1);
-      this.saveData();
-      this.renderExercises();
-      Toast.show('Exercise deleted');
+      this._deleteExerciseWithUndo(day, exerciseIndex);
     });
 
     card.querySelector('.btn-cancel-delete').addEventListener('click', e => {
@@ -891,12 +939,81 @@ const Tracker = {
     });
   },
 
+  // --- Undo Delete ---
+  _undoState: null,
+  _undoTimer: null,
+
+  _deleteExerciseWithUndo(day, exerciseIndex) {
+    if (this._undoTimer) {
+      clearTimeout(this._undoTimer);
+      this._undoTimer = null;
+    }
+
+    const deleted = day.exercises.splice(exerciseIndex, 1)[0];
+    this.saveData();
+    this.renderExercises();
+    Haptics.warning();
+    Sound.delete();
+
+    this._undoState = {
+      exercise: deleted,
+      dayIndex: this.currentDayIndex,
+      weekIndex: this.data.currentWeekIndex,
+      insertIndex: exerciseIndex
+    };
+
+    this._showUndoToast(deleted.name);
+  },
+
+  _showUndoToast(name) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = 'toast undo-toast';
+    toast.innerHTML = `
+      <span>"${Utils.escapeHtml(name)}" deleted</span>
+      <button class="undo-toast-btn">Undo</button>
+    `;
+    container.appendChild(toast);
+
+    toast.querySelector('.undo-toast-btn').addEventListener('click', () => {
+      this._undoDelete();
+      toast.remove();
+    });
+
+    this._undoTimer = setTimeout(() => {
+      toast.classList.add('out');
+      toast.addEventListener('animationend', () => toast.remove());
+      this._undoState = null;
+      this._undoTimer = null;
+    }, 5000);
+  },
+
+  _undoDelete() {
+    if (!this._undoState) return;
+    const { exercise, dayIndex, weekIndex, insertIndex } = this._undoState;
+    const week = this.data.weeks[weekIndex];
+    if (!week) return;
+    const day = week.days[dayIndex];
+    if (!day) return;
+
+    day.exercises.splice(insertIndex, 0, exercise);
+    this.saveData();
+    this.renderExercises();
+    this._undoState = null;
+    if (this._undoTimer) { clearTimeout(this._undoTimer); this._undoTimer = null; }
+    Toast.show('Exercise restored');
+    Haptics.success();
+    Sound.importSuccess();
+  },
+
   // --- Edit / Add Exercise Modal ---
   _editingExerciseIndex: null,
 
   openEditModal(exerciseIndex) {
+    this._lastFocusedElement = document.activeElement;
     const modal = document.getElementById('editModal');
     modal.classList.add('active');
+    this._trapFocus(modal);
 
     // Reset to form mode
     document.getElementById('editFormMode').style.display = '';
@@ -930,8 +1047,11 @@ const Tracker = {
   },
 
   closeEditModal() {
-    document.getElementById('editModal').classList.remove('active');
+    const overlay = document.getElementById('editModal');
+    overlay.classList.add('closing');
+    setTimeout(() => overlay.classList.remove('active', 'closing'), 250);
     this._editingExerciseIndex = null;
+    this._releaseFocus();
   },
 
   saveEditedExercise() {
@@ -1119,9 +1239,12 @@ const Tracker = {
         // Swipe right → toggle completion
         currentCard.style.transform = 'translateX(0)';
         if (day.exercises[exIdx]) {
-          day.exercises[exIdx].completed = !day.exercises[exIdx].completed;
+          const newState = !day.exercises[exIdx].completed;
+          day.exercises[exIdx].completed = newState;
           this.saveData();
           this.renderExercises();
+          if (newState) { Haptics.success(); Sound.exerciseComplete(); }
+          else { Haptics.light(); Sound.exerciseUncomplete(); }
         }
       } else if (dx < -60 && currentWrapper) {
         // Swipe left → reveal delete
@@ -1132,10 +1255,7 @@ const Tracker = {
           const deleteHandler = (evt) => {
             evt.stopPropagation();
             if (day && day.exercises[exIdx]) {
-              day.exercises.splice(exIdx, 1);
-              this.saveData();
-              this.renderExercises();
-              Toast.show('Exercise deleted');
+              this._deleteExerciseWithUndo(day, exIdx);
             }
           };
           deleteBg.addEventListener('click', deleteHandler, { once: true });
@@ -1168,7 +1288,7 @@ const Tracker = {
     element.addEventListener('touchstart', e => {
       timer = setTimeout(() => {
         timer = null;
-        if (navigator.vibrate) navigator.vibrate(50);
+        Haptics.longPress();
         onLongPress();
       }, 500);
     }, { passive: true });

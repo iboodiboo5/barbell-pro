@@ -59,6 +59,169 @@ const Utils = {
   }
 };
 
+// --- Haptic Feedback ---
+const Haptics = {
+  _enabled: true,
+
+  init() {
+    const saved = Storage.get('barbellPro_haptics');
+    this._enabled = saved !== false;
+  },
+
+  get enabled() { return this._enabled; },
+  set enabled(val) {
+    this._enabled = val;
+    Storage.set('barbellPro_haptics', val);
+  },
+
+  _vibrate(pattern) {
+    if (!this._enabled) return;
+    if (navigator.vibrate) navigator.vibrate(pattern);
+  },
+
+  light()     { this._vibrate(10); },
+  success()   { this._vibrate(20); },
+  warning()   { this._vibrate([10, 40, 10]); },
+  longPress() { this._vibrate(50); }
+};
+
+// --- Sound System (Web Audio API) ---
+const Sound = {
+  _ctx: null,
+  _enabled: true,
+  _initialized: false,
+
+  init() {
+    const saved = Storage.get('barbellPro_sound');
+    this._enabled = saved !== false;
+  },
+
+  get enabled() { return this._enabled; },
+  set enabled(val) {
+    this._enabled = val;
+    Storage.set('barbellPro_sound', val);
+  },
+
+  _ensureContext() {
+    if (this._ctx) {
+      if (this._ctx.state === 'suspended') this._ctx.resume();
+      return this._ctx;
+    }
+    try {
+      this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+      return null;
+    }
+    return this._ctx;
+  },
+
+  warmUp() {
+    if (this._initialized) return;
+    this._ensureContext();
+    this._initialized = true;
+  },
+
+  _play(frequency, duration, type, volume, ramp) {
+    if (!this._enabled) return;
+    const ctx = this._ensureContext();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(frequency, ctx.currentTime);
+    if (ramp) {
+      osc.frequency.linearRampToValueAtTime(ramp, ctx.currentTime + duration);
+    }
+
+    const vol = volume || 0.08;
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration);
+  },
+
+  // --- Sound Presets ---
+  tabClick() {
+    this._play(1200, 0.05, 'sine', 0.06);
+  },
+
+  exerciseComplete() {
+    this._play(523, 0.08, 'sine', 0.10);
+    setTimeout(() => this._play(659, 0.1, 'sine', 0.08), 80);
+  },
+
+  exerciseUncomplete() {
+    this._play(659, 0.1, 'sine', 0.06, 523);
+  },
+
+  importSuccess() {
+    this._play(784, 0.15, 'sine', 0.12);
+    setTimeout(() => this._play(1047, 0.12, 'sine', 0.06), 100);
+  },
+
+  delete() {
+    this._play(150, 0.1, 'triangle', 0.10);
+  },
+
+  plateAdd() {
+    this._play(900, 0.04, 'triangle', 0.08);
+  }
+};
+
+// --- Settings ---
+const Settings = {
+  init() {
+    this.bindEvents();
+    this.syncToggles();
+  },
+
+  bindEvents() {
+    document.getElementById('settingsBtn').addEventListener('click', () => this.open());
+    document.getElementById('closeSettings').addEventListener('click', () => this.close());
+    document.getElementById('settingsModal').addEventListener('click', e => {
+      if (e.target === e.currentTarget) this.close();
+    });
+
+    document.getElementById('soundToggle').addEventListener('click', () => {
+      Sound.enabled = !Sound.enabled;
+      this.syncToggles();
+      Haptics.light();
+    });
+
+    document.getElementById('vibrationToggle').addEventListener('click', () => {
+      Haptics.enabled = !Haptics.enabled;
+      this.syncToggles();
+    });
+  },
+
+  syncToggles() {
+    const soundBtn = document.getElementById('soundToggle');
+    const vibBtn = document.getElementById('vibrationToggle');
+    soundBtn.classList.toggle('active', Sound.enabled);
+    soundBtn.setAttribute('aria-checked', String(Sound.enabled));
+    vibBtn.classList.toggle('active', Haptics.enabled);
+    vibBtn.setAttribute('aria-checked', String(Haptics.enabled));
+  },
+
+  open() {
+    document.getElementById('settingsModal').classList.add('active');
+    Haptics.light();
+    Sound.tabClick();
+  },
+
+  close() {
+    const overlay = document.getElementById('settingsModal');
+    overlay.classList.add('closing');
+    setTimeout(() => overlay.classList.remove('active', 'closing'), 250);
+  }
+};
+
 // --- Shared Constants ---
 const LIFT_GROUPS = {
   'Bench Press': ['bench press', 'pause bench press', 'spoto bench press', 'flat bench'],
@@ -113,19 +276,60 @@ const App = {
     this.requestPersistentStorage();
     this.setupTabNavigation();
 
+    // Initialize feedback systems
+    Haptics.init();
+    Sound.init();
+
+    // Warm up AudioContext on first user interaction (iOS requirement)
+    document.addEventListener('click', () => Sound.warmUp(), { once: true });
+    document.addEventListener('touchstart', () => Sound.warmUp(), { once: true });
+
     // Initialize modules
     Calculator.init();
     Tracker.init();
     Notes.init();
     Analytics.init();
+    Settings.init();
   },
 
   registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(err => {
-        console.warn('SW registration failed:', err);
+    if (!('serviceWorker' in navigator)) return;
+
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            this.showUpdateBanner(newWorker);
+          }
+        });
       });
-    }
+    }).catch(err => {
+      console.warn('SW registration failed:', err);
+    });
+
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
+  },
+
+  showUpdateBanner(worker) {
+    const banner = document.createElement('div');
+    banner.className = 'update-banner';
+    banner.innerHTML = `
+      <span>New version available</span>
+      <button class="update-btn">Update</button>
+    `;
+    document.body.appendChild(banner);
+
+    banner.querySelector('.update-btn').addEventListener('click', () => {
+      worker.postMessage({ type: 'SKIP_WAITING' });
+      banner.remove();
+    });
   },
 
   requestPersistentStorage() {
@@ -146,6 +350,9 @@ const App = {
   },
 
   switchTab(tabName) {
+    Haptics.light();
+    Sound.tabClick();
+
     // Update buttons
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tab === tabName);

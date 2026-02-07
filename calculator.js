@@ -128,6 +128,8 @@ const Calculator = {
     this.saveState();
     this.renderBarbell();
     this.updateDisplay();
+    Haptics.light();
+    Sound.plateAdd();
   },
 
   removePlate(sortedIndex) {
@@ -165,6 +167,8 @@ const Calculator = {
     this.saveState();
     this.renderBarbell();
     this.updateDisplay();
+    Haptics.warning();
+    Sound.delete();
   },
 
   // Returns total weight in KG

@@ -13,28 +13,38 @@ const Analytics = {
   },
 
   refresh() {
-    this.renderConsistency();
-    this.buildLiftData();
-    this.renderLiftSelector();
+    // Show skeleton shimmer during computation
+    const chartContainers = document.querySelectorAll('.chart-container');
+    chartContainers.forEach(c => c.classList.add('skeleton', 'chart-skeleton'));
 
-    const lifts = Object.keys(this.liftData);
-    if (lifts.length === 0) {
-      document.getElementById('analyticsEmpty').style.display = 'flex';
-      document.getElementById('analyticsContent').style.display = 'none';
-      return;
-    }
+    requestAnimationFrame(() => {
+      this.renderConsistency();
+      this.buildLiftData();
+      this.renderLiftSelector();
 
-    document.getElementById('analyticsEmpty').style.display = 'none';
-    document.getElementById('analyticsContent').style.display = 'block';
+      const lifts = Object.keys(this.liftData);
+      if (lifts.length === 0) {
+        document.getElementById('analyticsEmpty').style.display = 'flex';
+        document.getElementById('analyticsContent').style.display = 'none';
+        chartContainers.forEach(c => c.classList.remove('skeleton', 'chart-skeleton'));
+        return;
+      }
 
-    if (!this.selectedLift || !this.liftData[this.selectedLift]) {
-      this.selectedLift = lifts[0];
-    }
+      document.getElementById('analyticsEmpty').style.display = 'none';
+      document.getElementById('analyticsContent').style.display = 'block';
 
-    this.renderLiftSelector();
-    this.renderCharts();
-    this.renderStats();
-    this.renderHistory();
+      if (!this.selectedLift || !this.liftData[this.selectedLift]) {
+        this.selectedLift = lifts[0];
+      }
+
+      this.renderLiftSelector();
+      this.renderCharts();
+      this.renderStats();
+      this.renderHistory();
+
+      // Remove skeleton after rendering
+      chartContainers.forEach(c => c.classList.remove('skeleton', 'chart-skeleton'));
+    });
   },
 
   renderConsistency() {
@@ -47,70 +57,111 @@ const Analytics = {
     }
 
     section.style.display = '';
-    const targetDaysPerWeek = 4;
     const weeks = workouts.weeks;
 
-    // Build week data
-    const weekData = weeks.map(week => {
-      const daysCompleted = week.days.filter(d => d.exercises && d.exercises.length > 0).length;
+    // Helper: get the first non-empty date from a week's days
+    const getWeekDate = (week) => {
+      for (const day of week.days) {
+        if (day.date && day.date.trim()) return day.date.trim();
+      }
+      return null;
+    };
+
+    // Auto-detect program start date from Week 1
+    const startDateStr = getWeekDate(weeks[0]);
+    const startDate = startDateStr ? new Date(startDateStr) : null;
+
+    // Build week data with dynamic targets
+    const weekData = weeks.map((week, i) => {
+      const plannedDays = week.days.filter(d => d.exercises && d.exercises.length > 0);
+      const totalPlanned = plannedDays.length;
+      const totalCompleted = plannedDays.filter(d =>
+        d.exercises.some(ex => ex.completed)
+      ).length;
+
+      // Date-based timing check
+      let onTime = true; // default: assume on-time if no dates
+      const actualDateStr = getWeekDate(week);
+      if (startDate && actualDateStr && i > 0) {
+        const expectedStart = new Date(startDate);
+        expectedStart.setDate(expectedStart.getDate() + (i * 7));
+        const expectedEnd = new Date(expectedStart);
+        expectedEnd.setDate(expectedEnd.getDate() + 6);
+        const actualDate = new Date(actualDateStr);
+        onTime = actualDate <= expectedEnd;
+      }
+
       return {
         label: week.label,
-        daysCompleted,
-        target: targetDaysPerWeek
+        planned: totalPlanned,
+        completed: totalCompleted,
+        onTime
       };
     });
 
-    // Overall rate
-    const totalDone = weekData.reduce((s, w) => s + w.daysCompleted, 0);
-    const totalTarget = weekData.length * targetDaysPerWeek;
-    const rate = totalTarget > 0 ? Math.round((totalDone / totalTarget) * 100) : 0;
+    // Overall completion rate (days completed / days planned)
+    const totalPlanned = weekData.reduce((sum, w) => sum + w.planned, 0);
+    const totalCompleted = weekData.reduce((sum, w) => sum + w.completed, 0);
+    const completionRate = totalPlanned > 0 ? Math.round((totalCompleted / totalPlanned) * 100) : 0;
+
+    // Count late weeks for display
+    const lateWeeks = weekData.filter(w => !w.onTime && w.planned > 0).length;
 
     const rateEl = document.getElementById('consistencyRate');
-    rateEl.textContent = rate + '%';
+    rateEl.textContent = completionRate + '%';
     rateEl.className = 'consistency-rate';
-    if (rate >= 90) rateEl.classList.add('rate-green');
-    else if (rate >= 70) rateEl.classList.add('rate-gold');
+    if (completionRate >= 90 && lateWeeks === 0) rateEl.classList.add('rate-green');
+    else if (completionRate >= 70) rateEl.classList.add('rate-gold');
     else rateEl.classList.add('rate-red');
 
-    // Heatmap grid
+    // Heatmap grid — per-week cell
     const grid = document.getElementById('consistencyGrid');
     grid.innerHTML = weekData.map((w, i) => {
-      const ratio = w.daysCompleted / w.target;
+      const ratio = w.planned > 0 ? w.completed / w.planned : 0;
       let level = 0;
       if (ratio >= 1) level = 4;
       else if (ratio >= 0.75) level = 3;
       else if (ratio >= 0.5) level = 2;
       else if (ratio > 0) level = 1;
 
+      // Late weeks get a red border indicator
+      const lateClass = (!w.onTime && w.planned > 0) ? ' late' : '';
+      const timeStatus = w.onTime ? 'on time' : 'late';
+
       return `<div class="consistency-cell-group">
-        <div class="consistency-cell level-${level}" title="${w.label}: ${w.daysCompleted}/${w.target} days">
-          <span class="cell-count">${w.daysCompleted}</span>
+        <div class="consistency-cell level-${level}${lateClass}" title="${w.label}: ${w.completed}/${w.planned} days (${timeStatus})">
+          <span class="cell-count">${w.completed}</span>
         </div>
         <div class="consistency-cell-label">W${i + 1}</div>
       </div>`;
     }).join('');
 
-    // Streak calculation
+    // Streak: consecutive weeks (from most recent) fully completed AND on time
     const streakEl = document.getElementById('consistencyStreak');
     let streak = 0;
     for (let i = weekData.length - 1; i >= 0; i--) {
-      if (weekData[i].daysCompleted >= targetDaysPerWeek - 1) {
+      if (weekData[i].planned === 0) continue;
+      if (weekData[i].completed >= weekData[i].planned && weekData[i].onTime) {
         streak++;
       } else {
         break;
       }
     }
 
+    let streakHtml = '';
     if (streak > 0) {
-      const msgs = [
-        'Keep it up!',
-        'On fire!',
-        'Unstoppable!',
-        'Beast mode!',
-        'Legendary consistency!'
-      ];
+      const msgs = ['Keep it up!', 'On fire!', 'Unstoppable!', 'Beast mode!', 'Legendary consistency!'];
       const msgIdx = Math.min(streak - 1, msgs.length - 1);
-      streakEl.innerHTML = `<span class="streak-fire">\u{1F525}</span> ${streak} week${streak !== 1 ? 's' : ''} consistent <span class="streak-msg">${msgs[msgIdx]}</span>`;
+      streakHtml = `<span class="streak-fire">\u{1F525}</span> ${streak} week${streak !== 1 ? 's' : ''} consistent <span class="streak-msg">${msgs[msgIdx]}</span>`;
+    }
+
+    // Add late warning if applicable
+    if (lateWeeks > 0) {
+      streakHtml += `${streakHtml ? '<br>' : ''}<span class="streak-late">\u26A0\uFE0F ${lateWeeks} week${lateWeeks !== 1 ? 's' : ''} behind schedule</span>`;
+    }
+
+    if (streakHtml) {
+      streakEl.innerHTML = streakHtml;
       streakEl.style.display = '';
     } else {
       streakEl.style.display = 'none';
