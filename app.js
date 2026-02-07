@@ -205,6 +205,8 @@ const RestTimer = {
   _isExpanded: false,
   _notificationPermission: false,
   _dismissTimer: null,
+  _pillCorner: 'bottom-right',
+  _isDragging: false,
 
   PRESETS: [
     { label: '2:00', seconds: 120 },  // "Last" — updated from localStorage
@@ -223,6 +225,13 @@ const RestTimer = {
       this.PRESETS[0].label = this.formatTime(saved);
     }
 
+    // Load saved pill corner position
+    const savedCorner = Storage.get('barbellPro_pillCorner');
+    if (savedCorner) this._pillCorner = savedCorner;
+
+    // Setup draggable pill
+    this._setupPillDrag();
+
     // Bind timer button
     document.getElementById('timerBtn').addEventListener('click', () => {
       Haptics.light();
@@ -231,6 +240,14 @@ const RestTimer = {
 
     // Bind pill tap → expand
     document.getElementById('restPill').addEventListener('click', () => this.expand());
+
+    // Bind digits tap → editable custom time (only when not running)
+    document.getElementById('timerDigits').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!this._isRunning && this._isExpanded) {
+        this._makeDigitsEditable();
+      }
+    });
 
     // Bind overlay dismiss (tap outside ring)
     document.getElementById('timerOverlay').addEventListener('click', (e) => {
@@ -249,6 +266,14 @@ const RestTimer = {
     // Check notification permission
     if ('Notification' in window && Notification.permission === 'granted') {
       this._notificationPermission = true;
+    }
+
+    // Show iOS timer link on iOS devices
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (isIOS) {
+      const iosLink = document.getElementById('iosTimerLink');
+      if (iosLink) iosLink.style.display = '';
     }
   },
 
@@ -271,12 +296,18 @@ const RestTimer = {
     this._endTime = Date.now() + (seconds * 1000);
     this._isRunning = true;
 
-    // Show pill
+    // Show pill at saved corner
     const pill = document.getElementById('restPill');
     pill.style.display = '';
-    pill.classList.remove('leaving', 'complete');
-    pill.classList.add('entering');
-    pill.addEventListener('animationend', () => pill.classList.remove('entering'), { once: true });
+    pill.classList.remove('complete');
+    pill.style.opacity = '0';
+    this._snapPillToCorner(pill, this._pillCorner, false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        pill.style.transition = 'opacity 0.3s ease';
+        pill.style.opacity = '1';
+      });
+    });
 
     // Show timer button indicator
     document.getElementById('timerBtn').classList.add('running');
@@ -310,14 +341,16 @@ const RestTimer = {
     this._clearTimers();
     this._isRunning = false;
 
-    // Hide pill
+    // Hide pill with fade
     const pill = document.getElementById('restPill');
-    pill.classList.remove('complete', 'entering');
-    pill.classList.add('leaving');
-    pill.addEventListener('animationend', () => {
+    pill.classList.remove('complete');
+    pill.style.transition = 'opacity 0.25s ease';
+    pill.style.opacity = '0';
+    setTimeout(() => {
       pill.style.display = 'none';
-      pill.classList.remove('leaving');
-    }, { once: true });
+      pill.style.opacity = '';
+      pill.style.transition = '';
+    }, 250);
 
     // Remove timer button indicator
     document.getElementById('timerBtn').classList.remove('running');
@@ -403,11 +436,13 @@ const RestTimer = {
       if (this._isExpanded) this.collapse();
 
       pill.classList.remove('complete');
-      pill.classList.add('leaving');
-      pill.addEventListener('animationend', () => {
+      pill.style.transition = 'opacity 0.25s ease';
+      pill.style.opacity = '0';
+      setTimeout(() => {
         pill.style.display = 'none';
-        pill.classList.remove('leaving');
-      }, { once: true });
+        pill.style.opacity = '';
+        pill.style.transition = '';
+      }, 250);
 
       document.getElementById('timerBtnDot').classList.remove('active');
     }, 3000);
@@ -427,16 +462,19 @@ const RestTimer = {
     const ring = document.getElementById('timerRingProgress');
     ring.classList.remove('complete');
 
+    const digitsEl = document.getElementById('timerDigits');
     if (this._isRunning) {
       const remaining = Math.max(0, Math.ceil((this._endTime - Date.now()) / 1000));
       this._updateRing(remaining, this._duration);
-      document.getElementById('timerDigits').textContent = this.formatTime(remaining);
+      digitsEl.textContent = this.formatTime(remaining);
+      digitsEl.classList.remove('editable');
       // Show stop button
       document.getElementById('timerStopBtn').style.display = '';
     } else {
       // Show last-used duration as default (full ring)
       const defaultTime = this.PRESETS[0].seconds;
-      document.getElementById('timerDigits').textContent = this.formatTime(defaultTime);
+      digitsEl.textContent = this.formatTime(defaultTime);
+      digitsEl.classList.add('editable');
       this._updateRing(defaultTime, defaultTime);
       // Hide stop button when no timer running
       document.getElementById('timerStopBtn').style.display = 'none';
@@ -501,6 +539,199 @@ const RestTimer = {
     }
   },
 
+  _setupPillDrag() {
+    const pill = document.getElementById('restPill');
+    const DRAG_THRESHOLD = 8;
+    let startX = 0, startY = 0, pillStartX = 0, pillStartY = 0;
+    let hasDragged = false;
+
+    pill.addEventListener('touchstart', (e) => {
+      if (e.touches.length > 1) return;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      const rect = pill.getBoundingClientRect();
+      pillStartX = rect.left;
+      pillStartY = rect.top;
+      hasDragged = false;
+    }, { passive: true });
+
+    pill.addEventListener('touchmove', (e) => {
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+
+      if (!this._isDragging) {
+        if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+          this._isDragging = true;
+          hasDragged = true;
+          pill.classList.add('dragging');
+          // Switch to direct positioning
+          pill.style.transition = 'none';
+          pill.style.bottom = 'auto';
+          pill.style.right = 'auto';
+        } else {
+          return;
+        }
+      }
+
+      e.preventDefault();
+      pill.style.left = (pillStartX + dx) + 'px';
+      pill.style.top = (pillStartY + dy) + 'px';
+    }, { passive: false });
+
+    pill.addEventListener('touchend', () => {
+      if (!this._isDragging) return;
+      this._isDragging = false;
+      pill.classList.remove('dragging');
+
+      // Find nearest corner
+      const rect = pill.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const midX = vw / 2;
+      const midY = vh / 2;
+
+      // Determine quadrant
+      const isRight = cx >= midX;
+      const isBottom = cy >= midY;
+      let corner;
+      if (isBottom && isRight) corner = 'bottom-right';
+      else if (isBottom && !isRight) corner = 'bottom-left';
+      else if (!isBottom && isRight) corner = 'top-right';
+      else corner = 'top-left';
+
+      this._pillCorner = corner;
+      Storage.set('barbellPro_pillCorner', corner);
+      this._snapPillToCorner(pill, corner, true);
+    });
+
+    // Prevent tap (expand) from firing after a drag
+    pill.addEventListener('click', (e) => {
+      if (hasDragged) {
+        e.stopImmediatePropagation();
+        hasDragged = false;
+      }
+    }, true); // capture phase
+  },
+
+  _snapPillToCorner(pill, corner, animate) {
+    // Compute safe area offsets
+    const cs = getComputedStyle(document.documentElement);
+    const sat = parseInt(cs.getPropertyValue('--sat')) || 0;
+    const sab = parseInt(cs.getPropertyValue('--sab')) || 0;
+    const tabBarH = 70 + sab; // matches .tab-bar height
+
+    // Clear transform (no centering transform needed)
+    pill.style.transform = '';
+
+    if (animate) {
+      pill.style.transition = 'left 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), right 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), bottom 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+    } else {
+      pill.style.transition = 'none';
+    }
+
+    // Reset all position properties
+    pill.style.left = '';
+    pill.style.right = '';
+    pill.style.top = '';
+    pill.style.bottom = '';
+
+    switch (corner) {
+      case 'top-left':
+        pill.style.left = '16px';
+        pill.style.top = (60 + sat) + 'px';
+        break;
+      case 'top-right':
+        pill.style.right = '16px';
+        pill.style.top = (60 + sat) + 'px';
+        break;
+      case 'bottom-left':
+        pill.style.left = '16px';
+        pill.style.bottom = (tabBarH + 8) + 'px';
+        break;
+      case 'bottom-right':
+      default:
+        pill.style.right = '16px';
+        pill.style.bottom = (tabBarH + 8) + 'px';
+        break;
+    }
+  },
+
+  _makeDigitsEditable() {
+    const digitsEl = document.getElementById('timerDigits');
+    if (digitsEl.querySelector('input')) return; // Already editable
+
+    const currentText = digitsEl.textContent.trim();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.inputMode = 'numeric';
+    input.className = 'timer-digits-input';
+    input.value = currentText;
+    input.maxLength = 5;
+    input.setAttribute('aria-label', 'Enter custom time MM:SS');
+
+    digitsEl.textContent = '';
+    digitsEl.classList.remove('editable');
+    digitsEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    const commit = () => {
+      const val = input.value.trim();
+      const seconds = this._parseTimeInput(val);
+      if (seconds !== null && seconds >= 5 && seconds <= 5999) {
+        digitsEl.textContent = this.formatTime(seconds);
+        this.start(seconds);
+        this._renderPresets();
+        document.getElementById('timerStopBtn').style.display = '';
+      } else {
+        const defaultTime = this.PRESETS[0].seconds;
+        digitsEl.textContent = this.formatTime(defaultTime);
+        digitsEl.classList.add('editable');
+        if (val) Toast.show('Invalid time (use M:SS, min 0:05)');
+      }
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        input.blur();
+      }
+      if (e.key === 'Escape') {
+        const defaultTime = this.PRESETS[0].seconds;
+        digitsEl.textContent = this.formatTime(defaultTime);
+        digitsEl.classList.add('editable');
+      }
+    });
+
+    input.addEventListener('blur', commit, { once: true });
+  },
+
+  _parseTimeInput(str) {
+    if (!str) return null;
+    str = str.trim();
+
+    // Try M:SS or MM:SS format
+    const colonMatch = str.match(/^(\d{1,2}):(\d{2})$/);
+    if (colonMatch) {
+      const m = parseInt(colonMatch[1]);
+      const s = parseInt(colonMatch[2]);
+      if (s >= 60) return null;
+      return m * 60 + s;
+    }
+
+    // Plain number → interpret as seconds if ≤ 300
+    const numMatch = str.match(/^(\d+)$/);
+    if (numMatch) {
+      const n = parseInt(numMatch[1]);
+      if (n <= 300) return n;
+      return null;
+    }
+
+    return null;
+  },
+
   _setupSwipeDown() {
     const overlay = document.getElementById('timerOverlay');
     let startY = 0;
@@ -508,8 +739,8 @@ const RestTimer = {
     let tracking = false;
 
     overlay.addEventListener('touchstart', (e) => {
-      // Only track if touching the overlay background, not buttons/ring
-      if (e.target === overlay || e.target.closest('.timer-ring-container')) {
+      // Only track if touching the overlay background or ring (not buttons or inputs)
+      if ((e.target === overlay || e.target.closest('.timer-ring-container')) && !e.target.closest('input')) {
         startY = e.touches[0].clientY;
         tracking = true;
         deltaY = 0;

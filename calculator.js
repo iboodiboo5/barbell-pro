@@ -272,7 +272,7 @@ const Calculator = {
 
   getPlateWidth(weight, unit) {
     const kgEq = unit === 'lb' ? Utils.lbToKg(weight) : weight;
-    if (kgEq >= 10) return 16;      // 10kg+ / 25lb+ → 16px (standard)
+    if (kgEq >= 13) return 16;      // 15kg+ / 35lb+ → 16px (thick)
     if (kgEq >= 4) return 14;       // 5kg / 10lb → 14px (slightly thinner)
     return 12;                       // 2.5kg, 1.25kg / 5lb, 2.5lb → 12px (thinnest)
   },

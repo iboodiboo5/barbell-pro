@@ -48,6 +48,7 @@
     <button class="timer-stop-btn" id="timerStopBtn" aria-label="Stop timer">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
     </button>
+    <a class="ios-timer-link" id="iosTimerLink" href="clock-timer://" style="display:none" aria-label="Open iOS Clock Timer">⏱ Set iOS Timer</a>
     <div class="timer-presets" id="timerPresets"></div>
   </div>
 
@@ -220,6 +221,23 @@
             <textarea id="editPasteArea" class="edit-paste-area" placeholder="Paste tab-separated:&#10;Bench Press&#9;60&#9;5&#9;5&#9;Felt strong" rows="4"></textarea>
           </div>
           <button class="btn btn-primary btn-full" id="saveEditBtn">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="deleteConfirmModal" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="deleteConfirmTitle">Delete Week?</h3>
+          <button class="modal-close" id="closeDeleteConfirm" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-hint" id="deleteConfirmMessage">This will remove all days and exercises.</p>
+          <div class="action-buttons" style="margin-top: 16px;">
+            <button class="btn btn-secondary" id="deleteConfirmCancel">Cancel</button>
+            <button class="btn btn-danger" id="deleteConfirmDelete">Delete</button>
+          </div>
         </div>
       </div>
     </div>

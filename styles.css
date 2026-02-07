@@ -157,7 +157,8 @@ button:active {
   border-top: 1px solid var(--border);
   display: flex;
   justify-content: space-around;
-  align-items: center;
+  align-items: flex-start;
+  padding-top: 6px;
   z-index: 100;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -711,6 +712,20 @@ button:active {
   background: var(--bg-tertiary);
   color: var(--text-primary);
   border-color: var(--bg-tertiary);
+}
+
+.day-tab.add-day-tab {
+  color: var(--accent-primary);
+  font-size: 18px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border: 1px dashed var(--border-light);
+  background: transparent;
+}
+
+.day-tab.add-day-tab:active {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
 }
 
 /* Exercise Card */
@@ -2072,12 +2087,9 @@ button:active {
   50% { opacity: 0.4; transform: scale(0.8); }
 }
 
-/* Floating Pill */
+/* Floating Pill — position controlled by JS (draggable, snaps to corners) */
 .rest-pill {
   position: fixed;
-  bottom: calc(78px + var(--sab));
-  left: 50%;
-  transform: translateX(-50%);
   z-index: 150;
   min-width: 90px;
   padding: 10px 22px;
@@ -2091,19 +2103,19 @@ button:active {
   overflow: hidden;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-}
-
-.rest-pill.entering {
-  animation: pillSlideIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
-.rest-pill.leaving {
-  animation: pillSlideOut 0.25s ease forwards;
+  transition: opacity 0.3s ease;
 }
 
 .rest-pill.complete {
   border-color: rgba(46, 204, 113, 0.4);
   animation: timerPulse 0.8s ease-in-out infinite;
+}
+
+.rest-pill.dragging {
+  transition: none !important;
+  transform: scale(1.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 160;
 }
 
 .rest-pill-progress {
@@ -2133,16 +2145,6 @@ button:active {
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 1px;
-}
-
-@keyframes pillSlideIn {
-  from { transform: translateX(-50%) translateY(60px); opacity: 0; }
-  to   { transform: translateX(-50%) translateY(0); opacity: 1; }
-}
-
-@keyframes pillSlideOut {
-  from { transform: translateX(-50%) translateY(0); opacity: 1; }
-  to   { transform: translateX(-50%) translateY(60px); opacity: 0; }
 }
 
 @keyframes timerPulse {
@@ -2225,6 +2227,30 @@ button:active {
   line-height: 1;
 }
 
+.timer-digits.editable {
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: var(--text-tertiary);
+  text-underline-offset: 6px;
+  cursor: text;
+}
+
+.timer-digits-input {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--accent-primary);
+  color: var(--text-primary);
+  font-size: 48px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -1px;
+  text-align: center;
+  width: 160px;
+  outline: none;
+  font-family: inherit;
+  caret-color: var(--accent-primary);
+}
+
 /* Stop Button */
 .timer-stop-btn {
   width: 56px;
@@ -2244,6 +2270,24 @@ button:active {
 .timer-stop-btn:active {
   background: rgba(233, 69, 96, 0.25);
   transform: scale(0.9);
+}
+
+/* iOS Timer Link */
+.ios-timer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  transition: color 0.2s;
+}
+
+.ios-timer-link:active {
+  color: var(--text-primary);
 }
 
 /* Preset Buttons */

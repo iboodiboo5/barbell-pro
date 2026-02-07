@@ -55,7 +55,7 @@ const Tracker = {
     // Day tabs (delegation)
     document.getElementById('dayTabs').addEventListener('click', e => {
       const tab = e.target.closest('.day-tab');
-      if (!tab || tab.classList.contains('delete-mode')) return;
+      if (!tab || tab.classList.contains('delete-mode') || tab.classList.contains('add-day-tab')) return;
       this.currentDayIndex = parseInt(tab.dataset.index);
       this.renderDayTabs();
       this.renderExercises();
@@ -618,7 +618,7 @@ const Tracker = {
   renderCurrentWeek() {
     const week = this.data.weeks[this.data.currentWeekIndex];
 
-    if (!week || week.days.length === 0) {
+    if (!week) {
       document.getElementById('dayTabs').innerHTML = '';
       document.getElementById('exerciseList').innerHTML = `
         <div class="empty-state">
@@ -629,6 +629,23 @@ const Tracker = {
           <h3>No Workouts Yet</h3>
           <p>Tap "Upload Workout" to import your training data</p>
         </div>`;
+      return;
+    }
+
+    if (week.days.length === 0) {
+      document.getElementById('dayTabs').innerHTML = '';
+      const exerciseList = document.getElementById('exerciseList');
+      exerciseList.innerHTML = `
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <h3>No Days Yet</h3>
+          <p>Upload workout data or add a day manually</p>
+        </div>
+        <button class="add-exercise-btn" id="addDayEmptyBtn" aria-label="Add a new day">+ Add Day</button>`;
+      document.getElementById('addDayEmptyBtn').addEventListener('click', () => this._addManualDay());
       return;
     }
 
@@ -656,6 +673,35 @@ const Tracker = {
       this.attachLongPress(tab, () => this.confirmDeleteDay(i, tab));
       container.appendChild(tab);
     });
+
+    // "+" button to add a new day
+    const addDayTab = document.createElement('button');
+    addDayTab.className = 'day-tab add-day-tab';
+    addDayTab.textContent = '+';
+    addDayTab.setAttribute('aria-label', 'Add new day');
+    addDayTab.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._addManualDay();
+    });
+    container.appendChild(addDayTab);
+  },
+
+  _addManualDay() {
+    const week = this.data.weeks[this.data.currentWeekIndex];
+    if (!week) return;
+    const dayNum = week.days.length + 1;
+    week.days.push({
+      id: Utils.generateId(),
+      dayName: 'Day ' + dayNum,
+      date: '',
+      exercises: []
+    });
+    this.currentDayIndex = week.days.length - 1;
+    this.saveData();
+    this.renderCurrentWeek();
+    Toast.show('Day ' + dayNum + ' added');
+    Haptics.light();
+    Sound.tabClick();
   },
 
   isBarbellCompound(name) {
@@ -1483,6 +1529,54 @@ const Tracker = {
     const confirmHandler = (e) => {
       e.stopPropagation();
       e.preventDefault();
+      this._showDeleteConfirmModal(weekIndex, weekLabel, pillEl, originalText);
+    };
+
+    pillEl.addEventListener('click', confirmHandler, { once: true });
+
+    this._deleteRevertTimer = setTimeout(() => {
+      pillEl.removeEventListener('click', confirmHandler);
+      if (pillEl.parentElement) {
+        pillEl.classList.remove('delete-mode');
+        pillEl.textContent = originalText;
+      }
+    }, 3000);
+  },
+
+  _showDeleteConfirmModal(weekIndex, weekLabel, pillEl, originalText) {
+    clearTimeout(this._deleteRevertTimer);
+    const modal = document.getElementById('deleteConfirmModal');
+    document.getElementById('deleteConfirmTitle').textContent = 'Delete ' + weekLabel + '?';
+    document.getElementById('deleteConfirmMessage').textContent =
+      'This will remove all days and exercises in ' + weekLabel + '.';
+    modal.classList.add('active');
+
+    const cleanup = () => {
+      modal.classList.add('closing');
+      setTimeout(() => modal.classList.remove('active', 'closing'), 250);
+      if (pillEl.parentElement) {
+        pillEl.classList.remove('delete-mode');
+        pillEl.textContent = originalText;
+      }
+    };
+
+    document.getElementById('deleteConfirmCancel').onclick = (e) => {
+      e.stopPropagation();
+      cleanup();
+    };
+
+    document.getElementById('closeDeleteConfirm').onclick = (e) => {
+      e.stopPropagation();
+      cleanup();
+    };
+
+    modal.onclick = (e) => {
+      if (e.target === e.currentTarget) cleanup();
+    };
+
+    document.getElementById('deleteConfirmDelete').onclick = (e) => {
+      e.stopPropagation();
+      cleanup();
       this.data.weeks.splice(weekIndex, 1);
       if (this.data.weeks.length === 0) {
         this.data.currentWeekIndex = -1;
@@ -1493,18 +1587,10 @@ const Tracker = {
       this.saveData();
       this.renderWeekTimeline();
       this.renderCurrentWeek();
-      Toast.show(`${weekLabel} deleted`);
+      Toast.show(weekLabel + ' deleted');
+      Haptics.warning();
+      Sound.delete();
     };
-
-    pillEl.addEventListener('click', confirmHandler, { once: true });
-
-    setTimeout(() => {
-      pillEl.removeEventListener('click', confirmHandler);
-      if (pillEl.parentElement) {
-        pillEl.classList.remove('delete-mode');
-        pillEl.textContent = originalText;
-      }
-    }, 3000);
   },
 
   confirmDeleteDay(dayIndex, tabEl) {
