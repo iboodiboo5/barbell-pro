@@ -9,7 +9,7 @@ KK Barbell is a PWA workout companion app with 4 tabs: Calculator, Tracker, Note
 - **Vanilla JS** — no frameworks, no build tools, no npm
 - **Single-page app** — tab switching via CSS class toggling
 - **localStorage** — all persistence via `Storage` utility wrapper (keys prefixed `barbellPro_`)
-- **Service Worker** — cache-first offline strategy, versioned cache (`kk-barbell-v11`)
+- **Service Worker** — cache-first offline strategy, versioned cache (`kk-barbell-v12`)
 - **Web Audio API** — synthesized sound effects (no audio files)
 
 ## Architecture

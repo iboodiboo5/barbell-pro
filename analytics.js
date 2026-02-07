@@ -48,7 +48,17 @@ const Analytics = {
     });
   },
 
+  // Calendar week key from a YYYY-MM-DD date string (ISO 8601 week)
+  _getISOWeekKey(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00'); // local timezone, avoid UTC shift
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7)); // nearest Thursday
+    const yearStart = new Date(d.getFullYear(), 0, 1);
+    const weekNum = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+    return d.getFullYear() + '-W' + weekNum;
+  },
+
   renderConsistency() {
+    const TARGET_DAYS = 4;
     const section = document.getElementById('consistencySection');
     const workouts = Storage.get('barbellPro_workouts');
 
@@ -57,92 +67,99 @@ const Analytics = {
       return;
     }
 
-    section.style.display = '';
-    const weeks = workouts.weeks;
+    // Collect all dates and completed dates across every programmed week
+    const allDates = new Set();
+    const completedDates = new Set();
 
-    // Helper: get the first non-empty date from a week's days
-    const getWeekDate = (week) => {
+    for (const week of workouts.weeks) {
+      if (!week.days) continue;
       for (const day of week.days) {
-        if (day.date && day.date.trim()) return day.date.trim();
+        if (!day.date || !day.date.trim()) continue;
+        const dateStr = day.date.trim();
+        allDates.add(dateStr);
+        if (day.exercises && day.exercises.some(ex => ex.completed)) {
+          completedDates.add(dateStr);
+        }
       }
-      return null;
-    };
+    }
 
-    // Auto-detect program start date from Week 1
-    const startDateStr = getWeekDate(weeks[0]);
-    const startDate = startDateStr ? new Date(startDateStr) : null;
+    if (allDates.size === 0) {
+      section.style.display = 'none';
+      return;
+    }
 
-    // Build week data with dynamic targets
-    const weekData = weeks.map((week, i) => {
-      const plannedDays = week.days.filter(d => d.exercises && d.exercises.length > 0);
-      const totalPlanned = plannedDays.length;
-      const totalCompleted = plannedDays.filter(d =>
-        d.exercises.some(ex => ex.completed)
-      ).length;
+    section.style.display = '';
 
-      // Date-based timing check
-      let onTime = true; // default: assume on-time if no dates
-      const actualDateStr = getWeekDate(week);
-      if (startDate && actualDateStr && i > 0) {
-        const expectedStart = new Date(startDate);
-        expectedStart.setDate(expectedStart.getDate() + (i * 7));
-        const expectedEnd = new Date(expectedStart);
-        expectedEnd.setDate(expectedEnd.getDate() + 6);
-        const actualDate = new Date(actualDateStr);
-        onTime = actualDate <= expectedEnd;
+    // Find date range (earliest → latest across all days)
+    const sortedDates = [...allDates].sort();
+    const firstDate = new Date(sortedDates[0] + 'T00:00:00');
+    const lastDate = new Date(sortedDates[sortedDates.length - 1] + 'T00:00:00');
+
+    // Build every calendar week from first to last date
+    const weekMap = new Map(); // weekKey → count of completed sessions
+    const weekOrder = []; // ordered week keys
+
+    // Walk day-by-day from firstDate to lastDate to discover all calendar weeks
+    const cursor = new Date(firstDate);
+    while (cursor <= lastDate) {
+      const iso = cursor.toISOString().slice(0, 10);
+      const weekKey = this._getISOWeekKey(iso);
+      if (!weekMap.has(weekKey)) {
+        weekMap.set(weekKey, 0);
+        weekOrder.push(weekKey);
       }
+      cursor.setDate(cursor.getDate() + 1);
+    }
 
-      return {
-        label: week.label,
-        planned: totalPlanned,
-        completed: totalCompleted,
-        onTime
-      };
-    });
+    // Count completed sessions per calendar week
+    for (const dateStr of completedDates) {
+      const weekKey = this._getISOWeekKey(dateStr);
+      if (weekMap.has(weekKey)) {
+        weekMap.set(weekKey, weekMap.get(weekKey) + 1);
+      }
+    }
 
-    // Overall completion rate (days completed / days planned)
-    const totalPlanned = weekData.reduce((sum, w) => sum + w.planned, 0);
+    // Build week data array
+    const weekData = weekOrder.map(key => ({
+      key,
+      completed: weekMap.get(key)
+    }));
+
+    // Overall completion rate: completed sessions / (calendar weeks × target)
     const totalCompleted = weekData.reduce((sum, w) => sum + w.completed, 0);
-    const completionRate = totalPlanned > 0 ? Math.round((totalCompleted / totalPlanned) * 100) : 0;
-
-    // Count late weeks for display
-    const lateWeeks = weekData.filter(w => !w.onTime && w.planned > 0).length;
+    const totalPossible = weekData.length * TARGET_DAYS;
+    const completionRate = totalPossible > 0 ? Math.round((totalCompleted / totalPossible) * 100) : 0;
 
     const rateEl = document.getElementById('consistencyRate');
     rateEl.textContent = completionRate + '%';
     rateEl.className = 'consistency-rate';
-    if (completionRate >= 90 && lateWeeks === 0) rateEl.classList.add('rate-green');
+    if (completionRate >= 90) rateEl.classList.add('rate-green');
     else if (completionRate >= 70) rateEl.classList.add('rate-gold');
     else rateEl.classList.add('rate-red');
 
-    // Heatmap grid — per-week cell
+    // Heatmap grid — one cell per calendar week
     const grid = document.getElementById('consistencyGrid');
     grid.innerHTML = weekData.map((w, i) => {
-      const ratio = w.planned > 0 ? w.completed / w.planned : 0;
+      const ratio = w.completed / TARGET_DAYS;
       let level = 0;
       if (ratio >= 1) level = 4;
       else if (ratio >= 0.75) level = 3;
       else if (ratio >= 0.5) level = 2;
       else if (ratio > 0) level = 1;
 
-      // Late weeks get a red border indicator
-      const lateClass = (!w.onTime && w.planned > 0) ? ' late' : '';
-      const timeStatus = w.onTime ? 'on time' : 'late';
-
       return `<div class="consistency-cell-group">
-        <div class="consistency-cell level-${level}${lateClass}" title="${w.label}: ${w.completed}/${w.planned} days (${timeStatus})">
+        <div class="consistency-cell level-${level}" title="Week ${i + 1}: ${w.completed}/${TARGET_DAYS} sessions">
           <span class="cell-count">${w.completed}</span>
         </div>
         <div class="consistency-cell-label">W${i + 1}</div>
       </div>`;
     }).join('');
 
-    // Streak: consecutive weeks (from most recent) fully completed AND on time
+    // Streak: consecutive calendar weeks (from most recent) hitting target
     const streakEl = document.getElementById('consistencyStreak');
     let streak = 0;
     for (let i = weekData.length - 1; i >= 0; i--) {
-      if (weekData[i].planned === 0) continue;
-      if (weekData[i].completed >= weekData[i].planned && weekData[i].onTime) {
+      if (weekData[i].completed >= TARGET_DAYS) {
         streak++;
       } else {
         break;
@@ -154,11 +171,6 @@ const Analytics = {
       const msgs = ['Keep it up!', 'On fire!', 'Unstoppable!', 'Beast mode!', 'Legendary consistency!'];
       const msgIdx = Math.min(streak - 1, msgs.length - 1);
       streakHtml = `<span class="streak-fire">\u{1F525}</span> ${streak} week${streak !== 1 ? 's' : ''} consistent <span class="streak-msg">${msgs[msgIdx]}</span>`;
-    }
-
-    // Add late warning if applicable
-    if (lateWeeks > 0) {
-      streakHtml += `${streakHtml ? '<br>' : ''}<span class="streak-late">\u26A0\uFE0F ${lateWeeks} week${lateWeeks !== 1 ? 's' : ''} behind schedule</span>`;
     }
 
     if (streakHtml) {

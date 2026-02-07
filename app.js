@@ -576,6 +576,22 @@ const Notes = {
     textarea.addEventListener('blur', () => {
       Storage.set('barbellPro_notes', textarea.value);
     });
+
+    // Copy button
+    document.getElementById('notesCopyBtn').addEventListener('click', () => {
+      const text = textarea.value;
+      if (!text.trim()) {
+        Toast.show('Nothing to copy');
+        return;
+      }
+      navigator.clipboard.writeText(text).then(() => {
+        Toast.show('Copied to clipboard');
+        Haptics.light();
+        Sound.tabClick();
+      }).catch(() => {
+        Toast.show('Copy failed');
+      });
+    });
   },
 
   showSaved() {

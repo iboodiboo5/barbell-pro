@@ -1531,17 +1531,6 @@ button:active {
   font-weight: 500;
 }
 
-/* Late week indicator */
-.consistency-cell.late {
-  border: 2px solid var(--accent-primary);
-}
-
-.streak-late {
-  font-size: 13px;
-  color: var(--accent-primary);
-  font-weight: 500;
-}
-
 /* Lift Search Bar */
 .lift-search-wrapper {
   position: relative;
@@ -1951,6 +1940,31 @@ button:active {
   padding-left: 0;
   padding-right: 0;
   flex-shrink: 0;
+}
+
+.notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notes-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+}
+
+.notes-copy-btn:active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
 }
 
 .notes-container {
