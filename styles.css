@@ -377,7 +377,7 @@ button:active {
 }
 
 .total-weight-lb {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
   line-height: 1;
   color: var(--text-secondary);
@@ -864,31 +864,64 @@ button:active {
   margin-bottom: 0;
   position: relative;
   z-index: 1;
-  transition: transform 0.2s ease;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Swipe Complete Background (green, left side) */
+.swipe-complete-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  background: var(--accent-green);
+  display: flex;
+  align-items: center;
+  padding-left: 24px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  border-radius: var(--radius);
+}
+
+.swipe-complete-bg .swipe-icon {
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  transform: scale(0.5);
+  opacity: 0.3;
+}
+
+/* Swipe Delete Background (red, right side) */
 .swipe-delete-bg {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 80px;
+  width: 100%;
   background: var(--accent-primary);
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
+  justify-content: flex-end;
+  padding-right: 24px;
   color: white;
   font-size: 12px;
   font-weight: 600;
   opacity: 0;
   transition: opacity 0.15s;
-  border-radius: 0 var(--radius) var(--radius) 0;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
+.swipe-delete-bg .swipe-icon {
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  transform: scale(0.5);
+  opacity: 0.3;
+}
+
 .swipe-delete-bg.visible {
+  opacity: 1;
+}
+
+.swipe-delete-bg.visible .swipe-icon {
+  transform: scale(1);
   opacity: 1;
 }
 
@@ -1013,6 +1046,57 @@ button:active {
 .add-exercise-btn:active {
   color: var(--accent-primary);
   border-color: var(--accent-primary);
+}
+
+/* Long-press visual hint (200ms before trigger) */
+.press-hint {
+  transform: scale(0.92) !important;
+  opacity: 0.6 !important;
+  transition: transform 0.2s ease, opacity 0.2s ease !important;
+}
+
+/* One-time long-press tooltip */
+.long-press-hint {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px var(--shadow);
+  border: 1px solid var(--border-light);
+  animation: hintIn 0.3s ease forwards;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.long-press-hint::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--bg-elevated);
+}
+
+.long-press-hint.out {
+  animation: hintOut 0.3s ease forwards;
+}
+
+@keyframes hintIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes hintOut {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to { opacity: 0; transform: translateX(-50%) translateY(4px); }
 }
 
 /* Week/Day Delete Mode */
@@ -1458,6 +1542,43 @@ button:active {
   font-weight: 500;
 }
 
+/* Lift Search Bar */
+.lift-search-wrapper {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.lift-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.lift-search-input {
+  width: 100%;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 10px 16px 10px 40px;
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.lift-search-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.lift-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
 .lift-selector {
   display: flex;
   gap: 8px;
@@ -1511,6 +1632,180 @@ button:active {
   width: 100%;
   height: 200px;
   display: block;
+  cursor: pointer;
+}
+
+/* Chart Tooltip */
+.chart-tooltip {
+  position: absolute;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  min-width: 100px;
+  z-index: 20;
+  transform: translateX(-50%);
+  box-shadow: 0 4px 16px var(--shadow);
+  animation: fadeIn 0.15s ease;
+  pointer-events: none;
+}
+
+.chart-tooltip-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+
+.chart-tooltip-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.chart-tooltip-detail {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* Strength Calculators */
+.calculators-section {
+  margin-bottom: 16px;
+}
+
+.calculators-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.calculators-header:active {
+  background: var(--bg-surface);
+  transform: none;
+}
+
+.calculators-header .calc-arrow {
+  transition: transform 0.3s ease;
+  color: var(--text-tertiary);
+}
+
+.calculators-header.open .calc-arrow {
+  transform: rotate(180deg);
+}
+
+.calculators-body {
+  margin-top: 8px;
+}
+
+.calc-card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+}
+
+.calc-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.calc-card-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 14px;
+}
+
+.calc-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.calc-field {
+  flex: 1;
+  min-width: 80px;
+}
+
+.calc-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.calc-input {
+  width: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: inherit;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+}
+
+.calc-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.calc-btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.calc-gender {
+  width: 100%;
+}
+
+.calc-result {
+  margin-top: 14px;
+  padding: 14px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent-green);
+}
+
+.calc-result-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.calc-result-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--accent-green);
+}
+
+.calc-result-detail {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
 }
 
 /* Analytics Stats */
@@ -1640,17 +1935,39 @@ button:active {
 }
 
 /* --- Notes Tab --- */
+#tab-notes {
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  height: calc(100vh - 70px - var(--sab) - var(--sat));
+  padding: 16px;
+}
+
+#tab-notes.active {
+  display: flex;
+}
+
+#tab-notes .section-header {
+  padding-left: 0;
+  padding-right: 0;
+  flex-shrink: 0;
+}
+
 .notes-container {
-  padding: 0 16px;
+  padding: 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .notes-textarea {
   width: 100%;
-  min-height: calc(100vh - 200px);
+  flex: 1;
+  height: 0;
   background: var(--bg-surface);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-family: -apple-system, system-ui, sans-serif;
   font-size: 15px;
@@ -1660,6 +1977,8 @@ button:active {
   outline: none;
   transition: border-color 0.2s;
   box-sizing: border-box;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .notes-textarea:focus {
@@ -1677,6 +1996,7 @@ button:active {
   padding: 8px;
   opacity: 0;
   transition: opacity 0.3s;
+  flex-shrink: 0;
 }
 
 .notes-status.visible {
@@ -1751,6 +2071,42 @@ button:active {
   font-size: 14px;
   color: var(--text-tertiary);
   font-weight: 500;
+}
+
+/* Body Weight Input Group */
+.bw-input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.setting-input {
+  width: 70px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 15px;
+  font-family: inherit;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+}
+
+.setting-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.bw-unit-toggle {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  transition: all 0.2s;
 }
 
 /* iOS-style toggle switch */

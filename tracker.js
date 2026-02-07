@@ -610,6 +610,8 @@ const Tracker = {
       if (activePill) {
         activePill.scrollIntoView({ inline: 'center', block: 'nearest' });
       }
+      // One-time long-press hint
+      this.showLongPressHint();
     });
   },
 
@@ -679,7 +681,19 @@ const Tracker = {
 
     const container = document.getElementById('exerciseList');
     if (day.exercises.length === 0) {
-      container.innerHTML = '<div class="empty-state"><h3>No exercises</h3><p>Upload workout data to add exercises</p></div>';
+      container.innerHTML = `
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <h3>No Exercises</h3>
+          <p>Add exercises or upload workout data</p>
+        </div>
+        <button class="add-exercise-btn" id="addExerciseBtn">+ Add Exercise</button>
+      `;
+      const addBtn = document.getElementById('addExerciseBtn');
+      if (addBtn) addBtn.addEventListener('click', () => this.openEditModal(-1));
       return;
     }
 
@@ -694,9 +708,11 @@ const Tracker = {
       const cardClass = `exercise-card ${ex.completed ? 'completed' : ''} ${isCompound ? 'compound' : 'accessory'}`;
 
       return `<div class="exercise-card-wrapper" data-exercise-index="${i}">
+        <div class="swipe-complete-bg">
+          <svg class="swipe-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
         <div class="swipe-delete-bg">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          Delete
+          <svg class="swipe-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </div>
         <div class="${cardClass}" data-id="${ex.id}" data-exercise-index="${i}">
         <div class="exercise-header">
@@ -733,7 +749,7 @@ const Tracker = {
     // Add "Add Exercise" button at the bottom
     container.innerHTML += `<button class="add-exercise-btn" id="addExerciseBtn">+ Add Exercise</button>`;
 
-    // Bind completion toggles
+    // Bind completion toggles (targeted update — no full rerender)
     container.querySelectorAll('.complete-toggle').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();
@@ -741,7 +757,15 @@ const Tracker = {
         const newState = !day.exercises[idx].completed;
         day.exercises[idx].completed = newState;
         this.saveData();
-        this.renderExercises();
+
+        // Update only this specific card
+        const card = btn.closest('.exercise-card');
+        if (card) {
+          card.classList.toggle('completed', newState);
+        }
+        btn.classList.toggle('checked', newState);
+        btn.setAttribute('aria-label', newState ? 'Mark incomplete' : 'Mark complete');
+
         if (newState) {
           Haptics.success();
           Sound.exerciseComplete();
@@ -1171,24 +1195,48 @@ const Tracker = {
     }
   },
 
-  // --- Swipe Gestures ---
+  // --- Swipe Gestures (Spotify-style elastic physics) ---
   setupSwipeHandlers() {
     const container = document.getElementById('exerciseList');
-    let startX = 0, startY = 0, startTime = 0;
+    const THRESHOLD = 100;          // px to trigger action
+    const RESISTANCE = 0.85;        // near 1:1 finger tracking
+    const OVERSHOOT_RESISTANCE = 0.3; // logarithmic past threshold
+    const DELETE_LOCK = 80;         // px to lock delete open
+
+    let startX = 0, startY = 0;
     let currentCard = null, currentWrapper = null;
     let swiping = false, swipeDirection = null;
+    let activeDeleteWrapper = null; // track open delete state
+
+    // Reset any open delete state
+    const resetActiveDelete = () => {
+      if (activeDeleteWrapper) {
+        const card = activeDeleteWrapper.querySelector('.exercise-card');
+        const bg = activeDeleteWrapper.querySelector('.swipe-delete-bg');
+        if (card) {
+          card.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          card.style.transform = 'translateX(0)';
+        }
+        if (bg) bg.classList.remove('visible');
+        activeDeleteWrapper = null;
+      }
+    };
 
     container.addEventListener('touchstart', e => {
       const card = e.target.closest('.exercise-card');
       if (!card) return;
-      // Don't swipe if touching interactive elements
       if (e.target.closest('button, a, input, .remark-tag, .remark-add-btn, .kebab-dropdown')) return;
 
+      // If tapping on a different card, close any open delete
+      const wrapper = card.closest('.exercise-card-wrapper');
+      if (activeDeleteWrapper && activeDeleteWrapper !== wrapper) {
+        resetActiveDelete();
+      }
+
       currentCard = card;
-      currentWrapper = card.closest('.exercise-card-wrapper');
+      currentWrapper = wrapper;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
-      startTime = Date.now();
       swiping = false;
       swipeDirection = null;
       currentCard.style.transition = 'none';
@@ -1200,7 +1248,6 @@ const Tracker = {
       const dx = e.touches[0].clientX - startX;
       const dy = e.touches[0].clientY - startY;
 
-      // If not yet determined direction, decide
       if (!swipeDirection) {
         if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
           swipeDirection = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
@@ -1215,9 +1262,46 @@ const Tracker = {
       if (swipeDirection === 'horizontal') {
         e.preventDefault();
         swiping = true;
-        // Limit swipe: right up to 80px, left up to -100px
-        const clampedDx = dx > 0 ? Math.min(dx, 80) : Math.max(dx, -100);
-        currentCard.style.transform = `translateX(${clampedDx}px)`;
+
+        // Elastic physics: near 1:1 before threshold, logarithmic resistance past it
+        let translate;
+        const absDx = Math.abs(dx);
+        if (absDx <= THRESHOLD) {
+          translate = dx * RESISTANCE;
+        } else {
+          const over = absDx - THRESHOLD;
+          const dampened = THRESHOLD * RESISTANCE + over * OVERSHOOT_RESISTANCE;
+          translate = dx > 0 ? dampened : -dampened;
+        }
+
+        currentCard.style.transform = `translateX(${translate}px)`;
+
+        // Update icon scaling based on progress
+        if (dx > 0 && currentWrapper) {
+          const completeBg = currentWrapper.querySelector('.swipe-complete-bg');
+          if (completeBg) {
+            const progress = Math.min(absDx / THRESHOLD, 1);
+            completeBg.style.opacity = String(Math.max(0.3, progress));
+            const icon = completeBg.querySelector('.swipe-icon');
+            if (icon) {
+              const scale = 0.5 + progress * 0.5;
+              icon.style.transform = `scale(${scale})`;
+              icon.style.opacity = String(0.3 + progress * 0.7);
+            }
+          }
+        } else if (dx < 0 && currentWrapper) {
+          const deleteBg = currentWrapper.querySelector('.swipe-delete-bg');
+          if (deleteBg) {
+            const progress = Math.min(absDx / THRESHOLD, 1);
+            deleteBg.style.opacity = String(Math.max(0.3, progress));
+            const icon = deleteBg.querySelector('.swipe-icon');
+            if (icon) {
+              const scale = 0.5 + progress * 0.5;
+              icon.style.transform = `scale(${scale})`;
+              icon.style.opacity = String(0.3 + progress * 0.7);
+            }
+          }
+        }
       }
     }, { passive: false });
 
@@ -1228,51 +1312,107 @@ const Tracker = {
       }
 
       const dx = e.changedTouches[0].clientX - startX;
-      const elapsed = Date.now() - startTime;
-      currentCard.style.transition = 'transform 0.2s ease';
+      const absDx = Math.abs(dx);
+
+      // Spring-back transition
+      currentCard.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
 
       const exIdx = parseInt(currentCard.dataset.exerciseIndex);
       const week = this.data.weeks[this.data.currentWeekIndex];
       const day = week ? week.days[this.currentDayIndex] : null;
 
-      if (dx > 60 && elapsed < 400 && day) {
-        // Swipe right → toggle completion
-        currentCard.style.transform = 'translateX(0)';
-        if (day.exercises[exIdx]) {
-          const newState = !day.exercises[exIdx].completed;
-          day.exercises[exIdx].completed = newState;
-          this.saveData();
-          this.renderExercises();
-          if (newState) { Haptics.success(); Sound.exerciseComplete(); }
-          else { Haptics.light(); Sound.exerciseUncomplete(); }
+      if (dx > 0 && absDx >= THRESHOLD && day && day.exercises[exIdx]) {
+        // Swipe right past threshold → complete
+        // Brief overshoot then spring back
+        currentCard.style.transform = 'translateX(120px)';
+        const card = currentCard;
+        const wrapper = currentWrapper;
+        setTimeout(() => {
+          card.style.transition = 'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          card.style.transform = 'translateX(0)';
+          // Reset backgrounds
+          const completeBg = wrapper.querySelector('.swipe-complete-bg');
+          if (completeBg) {
+            completeBg.style.opacity = '0';
+            const icon = completeBg.querySelector('.swipe-icon');
+            if (icon) { icon.style.transform = ''; icon.style.opacity = ''; }
+          }
+        }, 150);
+
+        // Toggle completion
+        const newState = !day.exercises[exIdx].completed;
+        day.exercises[exIdx].completed = newState;
+        this.saveData();
+
+        // Targeted update (Phase 6 logic)
+        const cardEl = currentCard;
+        cardEl.classList.toggle('completed', newState);
+        const toggle = cardEl.querySelector('.complete-toggle');
+        if (toggle) {
+          toggle.classList.toggle('checked', newState);
+          toggle.setAttribute('aria-label', newState ? 'Mark incomplete' : 'Mark complete');
         }
-      } else if (dx < -60 && currentWrapper) {
-        // Swipe left → reveal delete
-        currentCard.style.transform = 'translateX(-80px)';
+
+        if (newState) { Haptics.success(); Sound.exerciseComplete(); }
+        else { Haptics.light(); Sound.exerciseUncomplete(); }
+
+      } else if (dx < 0 && absDx >= DELETE_LOCK && currentWrapper) {
+        // Swipe left past lock point → reveal delete button
+        currentCard.style.transform = `translateX(-${DELETE_LOCK}px)`;
         const deleteBg = currentWrapper.querySelector('.swipe-delete-bg');
         if (deleteBg) {
           deleteBg.classList.add('visible');
+          deleteBg.style.opacity = '1';
+          const icon = deleteBg.querySelector('.swipe-icon');
+          if (icon) { icon.style.transform = 'scale(1)'; icon.style.opacity = '1'; }
+
+          activeDeleteWrapper = currentWrapper;
+
           const deleteHandler = (evt) => {
             evt.stopPropagation();
             if (day && day.exercises[exIdx]) {
               this._deleteExerciseWithUndo(day, exIdx);
             }
+            activeDeleteWrapper = null;
           };
           deleteBg.addEventListener('click', deleteHandler, { once: true });
 
           // Auto-reset after 3s
+          const wrapperRef = currentWrapper;
+          const cardRef = currentCard;
           setTimeout(() => {
-            deleteBg.removeEventListener('click', deleteHandler);
-            deleteBg.classList.remove('visible');
-            if (currentCard) {
-              currentCard.style.transition = 'transform 0.2s ease';
-              currentCard.style.transform = 'translateX(0)';
+            if (activeDeleteWrapper === wrapperRef) {
+              deleteBg.removeEventListener('click', deleteHandler);
+              deleteBg.classList.remove('visible');
+              deleteBg.style.opacity = '';
+              if (icon) { icon.style.transform = ''; icon.style.opacity = ''; }
+              if (cardRef) {
+                cardRef.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                cardRef.style.transform = 'translateX(0)';
+              }
+              activeDeleteWrapper = null;
             }
           }, 3000);
         }
       } else {
-        // Snap back
+        // Snap back to rest — no action
         currentCard.style.transform = 'translateX(0)';
+
+        // Reset any background state
+        if (currentWrapper) {
+          const completeBg = currentWrapper.querySelector('.swipe-complete-bg');
+          const deleteBg = currentWrapper.querySelector('.swipe-delete-bg');
+          if (completeBg) {
+            completeBg.style.opacity = '0';
+            const icon = completeBg.querySelector('.swipe-icon');
+            if (icon) { icon.style.transform = ''; icon.style.opacity = ''; }
+          }
+          if (deleteBg && !deleteBg.classList.contains('visible')) {
+            deleteBg.style.opacity = '0';
+            const icon = deleteBg.querySelector('.swipe-icon');
+            if (icon) { icon.style.transform = ''; icon.style.opacity = ''; }
+          }
+        }
       }
 
       currentCard = null;
@@ -1282,12 +1422,20 @@ const Tracker = {
     }, { passive: true });
   },
 
-  // --- Week / Day Delete (long-press) ---
+  // --- Week / Day Delete (long-press with visual hint) ---
   attachLongPress(element, onLongPress) {
     let timer = null;
+    let hintTimer = null;
+
     element.addEventListener('touchstart', e => {
+      // Visual hint at 200ms (before 500ms trigger)
+      hintTimer = setTimeout(() => {
+        element.classList.add('press-hint');
+      }, 200);
+
       timer = setTimeout(() => {
         timer = null;
+        element.classList.remove('press-hint');
         Haptics.longPress();
         onLongPress();
       }, 500);
@@ -1295,11 +1443,34 @@ const Tracker = {
 
     element.addEventListener('touchend', () => {
       if (timer) { clearTimeout(timer); timer = null; }
+      if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+      element.classList.remove('press-hint');
     });
 
     element.addEventListener('touchmove', () => {
       if (timer) { clearTimeout(timer); timer = null; }
+      if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+      element.classList.remove('press-hint');
     });
+  },
+
+  // Show one-time long-press hint on first use
+  showLongPressHint() {
+    if (Storage.get('barbellPro_longPressHinted')) return;
+    const firstPill = document.querySelector('.week-pill:not(.add-week)');
+    if (!firstPill) return;
+
+    const hint = document.createElement('div');
+    hint.className = 'long-press-hint';
+    hint.textContent = 'Hold to delete';
+    firstPill.style.position = 'relative';
+    firstPill.appendChild(hint);
+
+    Storage.set('barbellPro_longPressHinted', true);
+    setTimeout(() => {
+      hint.classList.add('out');
+      hint.addEventListener('animationend', () => hint.remove());
+    }, 3000);
   },
 
   confirmDeleteWeek(weekIndex, pillEl) {

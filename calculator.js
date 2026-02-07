@@ -257,7 +257,9 @@ const Calculator = {
     el.className = 'plate';
     const color = getPlateColor(plate.weight, plate.unit);
     const height = getPlateHeight(plate.weight, plate.unit);
+    const width = this.getPlateWidth(plate.weight, plate.unit);
     el.style.height = height + 'px';
+    el.style.width = width + 'px';
     el.style.background = color;
 
     if (color === '#f0c040') el.style.color = '#333';
@@ -268,11 +270,17 @@ const Calculator = {
     return el;
   },
 
+  getPlateWidth(weight, unit) {
+    const kgEq = unit === 'lb' ? Utils.lbToKg(weight) : weight;
+    if (kgEq >= 10) return 16;      // 10kg+ / 25lb+ → 16px (standard)
+    if (kgEq >= 4) return 14;       // 5kg / 10lb → 14px (slightly thinner)
+    return 12;                       // 2.5kg, 1.25kg / 5lb, 2.5lb → 12px (thinnest)
+  },
+
   updateDisplay() {
     const totalKg = this.getTotalWeightKg();
     const totalLb = Utils.kgToLb(totalKg);
     const perSideKg = this.getPerSideWeightKg();
-    const perSideLb = Utils.kgToLb(perSideKg);
     const plateCount = this.state.plates.length;
 
     // Main display — always KG
@@ -283,15 +291,11 @@ const Calculator = {
     const lbEl = document.getElementById('totalWeightLb');
     if (lbEl) lbEl.textContent = Utils.formatWeight(totalLb);
 
-    // Breakdown
-    document.getElementById('weightBreakdown').textContent =
-      `Bar: ${this.state.barWeight}kg  \u00B7  Per side: ${Utils.formatWeight(perSideKg)}kg / ${Utils.formatWeight(perSideLb)}lb  \u00B7  ${plateCount} plate${plateCount !== 1 ? 's' : ''}`;
-
-    // Stats grid
-    document.getElementById('statTotalKg').textContent = Utils.formatWeight(totalKg);
-    document.getElementById('statTotalLb').textContent = Utils.formatWeight(totalLb);
-    document.getElementById('statPerSide').textContent = Utils.formatWeight(perSideKg) + 'kg';
-    document.getElementById('statPlateCount').textContent = plateCount;
+    // Simplified breakdown
+    const breakdown = plateCount > 0
+      ? `Bar: ${this.state.barWeight}kg  \u00B7  ${Utils.formatWeight(perSideKg)}kg per side`
+      : `Bar: ${this.state.barWeight}kg`;
+    document.getElementById('weightBreakdown').textContent = breakdown;
 
     // Undo button state
     document.getElementById('undoBtn').disabled = this.state.history.length === 0;

@@ -9,7 +9,8 @@ const Analytics = {
   liftData: {},
 
   init() {
-    // Will be populated on refresh
+    // Bind calculator events once
+    this.initCalculators();
   },
 
   refresh() {
@@ -276,7 +277,42 @@ const Analytics = {
 
   renderLiftSelector() {
     const container = document.getElementById('liftSelector');
-    const lifts = Object.keys(this.liftData);
+    const searchWrapper = document.getElementById('liftSearchWrapper');
+    let lifts = Object.keys(this.liftData);
+
+    // Show/hide search bar based on whether we have lifts
+    if (searchWrapper) {
+      searchWrapper.style.display = lifts.length > 0 ? '' : 'none';
+    }
+
+    // Smart sorting: compound-biased recent frequency
+    const workouts = Storage.get('barbellPro_workouts');
+    if (workouts && workouts.weeks) {
+      const recentWeeks = workouts.weeks.slice(-6);
+      const frequency = {};
+      for (const week of recentWeeks) {
+        for (const day of week.days) {
+          for (const ex of day.exercises) {
+            // Check both canonical and exact name
+            const canonical = this.identifyLift(ex.name);
+            const key = canonical && this.liftData[canonical] ? canonical : ex.name.trim();
+            if (this.liftData[key]) {
+              frequency[key] = (frequency[key] || 0) + 1;
+            }
+          }
+        }
+      }
+
+      // Compound bias: multiply by 1.5
+      if (typeof BARBELL_COMPOUNDS !== 'undefined') {
+        for (const compound of BARBELL_COMPOUNDS) {
+          if (frequency[compound]) frequency[compound] *= 1.5;
+        }
+      }
+
+      // Sort: by weighted frequency descending, then alphabetical
+      lifts.sort((a, b) => (frequency[b] || 0) - (frequency[a] || 0) || a.localeCompare(b));
+    }
 
     container.innerHTML = lifts.map(name =>
       `<button class="lift-pill ${name === this.selectedLift ? 'active' : ''}" data-lift="${Utils.escapeHtml(name)}">${Utils.escapeHtml(name)}</button>`
@@ -289,6 +325,23 @@ const Analytics = {
         this.renderCharts();
         this.renderStats();
         this.renderHistory();
+      });
+    });
+
+    // Bind search
+    this._bindLiftSearch();
+  },
+
+  _bindLiftSearch() {
+    const input = document.getElementById('liftSearch');
+    if (!input || input._bound) return;
+    input._bound = true;
+
+    input.addEventListener('input', () => {
+      const query = input.value.toLowerCase();
+      document.querySelectorAll('.lift-pill').forEach(pill => {
+        const name = pill.dataset.lift.toLowerCase();
+        pill.style.display = name.includes(query) ? '' : 'none';
       });
     });
   },
@@ -304,13 +357,16 @@ const Analytics = {
     const progressionData = entries.map((e, i) => ({
       x: i,
       y: e.weight,
-      label: e.weekLabel || e.date || ('Session ' + (i + 1))
+      label: e.weekLabel || e.date || ('Session ' + (i + 1)),
+      sets: e.sets,
+      reps: e.reps
     }));
     this.drawLineChart(progressionCanvas, progressionData, {
       color: '#e94560',
       fillColor: 'rgba(233, 69, 96, 0.1)',
       yLabel: 'Weight',
-      dotColor: '#e94560'
+      dotColor: '#e94560',
+      unit: 'kg'
     });
 
     // Volume chart
@@ -318,14 +374,17 @@ const Analytics = {
     const volumeData = entries.filter(e => e.volume > 0).map((e, i) => ({
       x: i,
       y: e.volume,
-      label: e.weekLabel || e.date || ('Session ' + (i + 1))
+      label: e.weekLabel || e.date || ('Session ' + (i + 1)),
+      sets: e.sets,
+      reps: e.reps
     }));
     if (volumeData.length > 0) {
       this.drawLineChart(volumeCanvas, volumeData, {
         color: '#3498db',
         fillColor: 'rgba(52, 152, 219, 0.1)',
         yLabel: 'Volume',
-        dotColor: '#3498db'
+        dotColor: '#3498db',
+        unit: 'vol'
       });
     }
   },
@@ -383,19 +442,21 @@ const Analytics = {
     for (let i = 0; i < data.length; i += step) {
       const x = pad.left + (data.length === 1 ? chartW / 2 : (i / (data.length - 1)) * chartW);
       const label = data[i].label || '';
-      // Truncate label
       const shortLabel = label.length > 8 ? label.substring(0, 8) : label;
       ctx.fillText(shortLabel, x, h - pad.bottom + 18);
     }
 
     if (data.length === 1) {
-      // Single point - just draw a dot
       const x = pad.left + chartW / 2;
       const y = pad.top + chartH / 2;
       ctx.fillStyle = options.dotColor || '#e94560';
       ctx.beginPath();
       ctx.arc(x, y, 5, 0, Math.PI * 2);
       ctx.fill();
+
+      // Store for interaction
+      canvas._chartData = { points: [{ x, y }], data, options, pad, chartW, chartH, yMin, yRange };
+      this._attachChartInteraction(canvas);
       return;
     }
 
@@ -439,11 +500,138 @@ const Analytics = {
       ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
       ctx.fill();
 
-      // White ring
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     });
+
+    // Store for interaction
+    canvas._chartData = { points, data, options, pad, chartW, chartH, yMin, yRange };
+    this._attachChartInteraction(canvas);
+  },
+
+  _attachChartInteraction(canvas) {
+    // Remove old handler if any
+    if (canvas._chartTapHandler) {
+      canvas.removeEventListener('click', canvas._chartTapHandler);
+    }
+
+    canvas._chartTapHandler = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const tapX = e.clientX - rect.left;
+      const { points, data, options } = canvas._chartData;
+
+      // Find nearest point
+      let nearestIdx = 0;
+      let nearestDist = Infinity;
+      points.forEach((p, i) => {
+        const dist = Math.abs(p.x - tapX);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestIdx = i;
+        }
+      });
+
+      // Only show if within reasonable distance
+      if (nearestDist > 40) {
+        this._dismissTooltip(canvas);
+        return;
+      }
+
+      this._showChartTooltip(canvas, points[nearestIdx], data[nearestIdx], options);
+    };
+
+    canvas.addEventListener('click', canvas._chartTapHandler);
+  },
+
+  _showChartTooltip(canvas, point, dataPoint, options) {
+    // Remove existing tooltip
+    this._dismissTooltip(canvas);
+
+    const container = canvas.closest('.chart-container');
+    if (!container) return;
+    container.style.position = 'relative';
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'chart-tooltip';
+
+    const valueStr = options.unit === 'vol'
+      ? `Volume: ${Math.round(dataPoint.y)}`
+      : `Weight: ${Utils.formatWeight(dataPoint.y)}kg`;
+    const setsReps = (dataPoint.sets && dataPoint.reps)
+      ? `${dataPoint.sets} × ${dataPoint.reps}`
+      : '';
+
+    tooltip.innerHTML = `
+      <div class="chart-tooltip-label">${Utils.escapeHtml(dataPoint.label)}</div>
+      <div class="chart-tooltip-value">${valueStr}</div>
+      ${setsReps ? `<div class="chart-tooltip-detail">${setsReps}</div>` : ''}
+    `;
+
+    // Position tooltip relative to chart container
+    const canvasRect = canvas.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    let left = point.x + (canvasRect.left - containerRect.left);
+    const top = point.y + (canvasRect.top - containerRect.top) - 60;
+
+    // Keep within bounds
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = Math.max(0, top) + 'px';
+
+    container.appendChild(tooltip);
+    canvas._tooltip = tooltip;
+
+    // Add indicator line on canvas
+    this._drawIndicatorLine(canvas, point);
+
+    // Auto-dismiss after 4s
+    canvas._tooltipTimer = setTimeout(() => this._dismissTooltip(canvas), 4000);
+  },
+
+  _drawIndicatorLine(canvas, point) {
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const { pad, chartH } = canvas._chartData;
+
+    // Save and draw (no ctx.scale — context already scaled by drawLineChart)
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(point.x, pad.top);
+    ctx.lineTo(point.x, pad.top + chartH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Highlight dot
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = canvas._chartData.options.color || '#e94560';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  },
+
+  _dismissTooltip(canvas) {
+    if (canvas._tooltip) {
+      canvas._tooltip.remove();
+      canvas._tooltip = null;
+    }
+    if (canvas._tooltipTimer) {
+      clearTimeout(canvas._tooltipTimer);
+      canvas._tooltipTimer = null;
+    }
+    // Redraw chart to remove indicator line (avoid recursion)
+    if (canvas._chartData && !canvas._redrawing) {
+      canvas._redrawing = true;
+      const { data, options } = canvas._chartData;
+      this.drawLineChart(canvas, data, options);
+      canvas._redrawing = false;
+    }
   },
 
   renderStats() {
@@ -493,5 +681,115 @@ const Analytics = {
         </div>
       `).join('')}
     `;
+  },
+
+  // --- Strength Calculators ---
+  initCalculators() {
+    // Toggle collapsible
+    const toggle = document.getElementById('calcToggle');
+    const body = document.getElementById('calcBody');
+    if (toggle && body) {
+      toggle.addEventListener('click', () => {
+        const open = body.style.display !== 'none';
+        body.style.display = open ? 'none' : '';
+        toggle.classList.toggle('open', !open);
+      });
+    }
+
+    // 1RM Calculator
+    const calcOneRm = document.getElementById('calcOneRm');
+    if (calcOneRm) {
+      calcOneRm.addEventListener('click', () => {
+        const weight = parseFloat(document.getElementById('oneRmWeight').value);
+        const reps = parseInt(document.getElementById('oneRmReps').value);
+        if (!weight || !reps || reps < 1) {
+          Toast.show('Enter weight and reps');
+          return;
+        }
+        const result = this.calculateOneRm(weight, reps);
+        const resultEl = document.getElementById('oneRmResult');
+        resultEl.style.display = '';
+        resultEl.innerHTML = `
+          <div class="calc-result-label">Estimated 1RM</div>
+          <div class="calc-result-value">${Utils.formatWeight(result.average)}kg</div>
+          <div class="calc-result-detail">
+            Epley: ${Utils.formatWeight(result.epley)}kg · Brzycki: ${Utils.formatWeight(result.brzycki)}kg
+          </div>
+        `;
+        Haptics.light();
+      });
+    }
+
+    // DOTS Gender toggle
+    const genderToggle = document.getElementById('dotsGender');
+    if (genderToggle) {
+      genderToggle.addEventListener('click', e => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        genderToggle.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    }
+
+    // DOTS Calculator — prefill body weight from settings
+    const dotsBodyWeight = document.getElementById('dotsBodyWeight');
+    if (dotsBodyWeight) {
+      const savedBw = Storage.get('barbellPro_bodyWeight');
+      const savedUnit = Storage.get('barbellPro_bodyWeightUnit') || 'kg';
+      if (savedBw) {
+        // Always show in kg for DOTS
+        dotsBodyWeight.value = savedUnit === 'lb' ? Utils.lbToKg(savedBw) : savedBw;
+      }
+    }
+
+    const calcDots = document.getElementById('calcDots');
+    if (calcDots) {
+      calcDots.addEventListener('click', () => {
+        const liftWeight = parseFloat(document.getElementById('dotsLiftWeight').value);
+        const bodyWeight = parseFloat(document.getElementById('dotsBodyWeight').value);
+        const gender = document.querySelector('#dotsGender button.active').dataset.gender;
+        if (!liftWeight || !bodyWeight) {
+          Toast.show('Enter lift weight and body weight');
+          return;
+        }
+        const dots = this.calculateDOTS(liftWeight, bodyWeight, gender);
+        const resultEl = document.getElementById('dotsResult');
+        resultEl.style.display = '';
+        resultEl.innerHTML = `
+          <div class="calc-result-label">DOTS Score</div>
+          <div class="calc-result-value">${dots.toFixed(1)}</div>
+          <div class="calc-result-detail">
+            ${liftWeight}kg lift at ${bodyWeight}kg body weight (${gender})
+          </div>
+        `;
+        Haptics.light();
+      });
+    }
+  },
+
+  calculateOneRm(weight, reps) {
+    if (reps === 1) return { epley: weight, brzycki: weight, average: weight };
+    const epley = weight * (1 + reps / 30);
+    const brzycki = weight * 36 / (37 - reps);
+    const average = (epley + brzycki) / 2;
+    return {
+      epley: Math.round(epley * 10) / 10,
+      brzycki: Math.round(brzycki * 10) / 10,
+      average: Math.round(average * 10) / 10
+    };
+  },
+
+  calculateDOTS(liftWeight, bodyWeight, gender) {
+    // DOTS coefficients
+    const maleCoeffs = [-307.75076, 24.0900756, -0.1918759221, 0.0007391293, -0.000001093];
+    const femaleCoeffs = [-57.96288, 13.6175032, -0.1126655495, 0.0005158568, -0.0000010706];
+    const coeffs = gender === 'female' ? femaleCoeffs : maleCoeffs;
+
+    const bw = bodyWeight;
+    const denominator = coeffs[0] + coeffs[1] * bw + coeffs[2] * Math.pow(bw, 2)
+      + coeffs[3] * Math.pow(bw, 3) + coeffs[4] * Math.pow(bw, 4);
+    if (denominator === 0 || !isFinite(denominator)) return 0;
+    const dots = (500 / denominator) * liftWeight;
+    return isFinite(dots) ? Math.max(0, dots) : 0;
   }
 };

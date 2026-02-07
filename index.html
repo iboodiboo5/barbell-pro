@@ -56,6 +56,18 @@
         <div class="settings-section">
           <div class="setting-row">
             <div>
+              <label>Body Weight</label>
+              <span class="setting-desc">Used for DOTS calculator</span>
+            </div>
+            <div class="bw-input-group">
+              <input type="number" id="bodyWeightInput" class="setting-input" placeholder="80" inputmode="decimal">
+              <button class="bw-unit-toggle" id="bwUnitToggle">kg</button>
+            </div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="setting-row">
+            <div>
               <label>App Version</label>
             </div>
             <span class="setting-value">1.0.0</span>
@@ -125,25 +137,6 @@
       </div>
     </div>
 
-    <!-- Stats Grid -->
-    <div class="stats-grid" id="statsGrid">
-      <div class="stat-item">
-        <div class="stat-value" id="statTotalKg">20</div>
-        <div class="stat-label">Total KG</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value" id="statTotalLb">44.09</div>
-        <div class="stat-label">Total LB</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value" id="statPerSide">0</div>
-        <div class="stat-label">Per Side</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value" id="statPlateCount">0</div>
-        <div class="stat-label">Plates</div>
-      </div>
-    </div>
   </section>
 
   <!-- ==================== TAB: TRACKER ==================== -->
@@ -287,6 +280,14 @@
       </div>
     </div>
 
+    <!-- Lift Search -->
+    <div class="lift-search-wrapper" id="liftSearchWrapper" style="display:none;">
+      <svg class="lift-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" id="liftSearch" class="lift-search-input" placeholder="Search lifts...">
+    </div>
+
     <!-- Lift Selector -->
     <div class="lift-selector" id="liftSelector">
       <!-- Populated dynamically -->
@@ -313,6 +314,57 @@
       <div class="chart-container">
         <h3 class="chart-title">Volume Over Time</h3>
         <canvas id="volumeChart"></canvas>
+      </div>
+
+      <!-- Strength Calculators (Collapsible) -->
+      <div class="calculators-section">
+        <button class="calculators-header" id="calcToggle">
+          <span>Strength Calculators</span>
+          <svg class="calc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="calculators-body" id="calcBody" style="display:none;">
+          <!-- 1RM Calculator -->
+          <div class="calc-card">
+            <h4 class="calc-card-title">Estimated 1RM</h4>
+            <p class="calc-card-desc">Calculate your one-rep max from a submaximal set</p>
+            <div class="calc-inputs">
+              <div class="calc-field">
+                <label>Weight</label>
+                <input type="number" id="oneRmWeight" class="calc-input" placeholder="100" inputmode="decimal">
+              </div>
+              <div class="calc-field">
+                <label>Reps</label>
+                <input type="number" id="oneRmReps" class="calc-input" placeholder="5" inputmode="numeric">
+              </div>
+              <button class="btn btn-primary calc-btn" id="calcOneRm">Calculate</button>
+            </div>
+            <div class="calc-result" id="oneRmResult" style="display:none;"></div>
+          </div>
+          <!-- DOTS Calculator -->
+          <div class="calc-card">
+            <h4 class="calc-card-title">DOTS Score</h4>
+            <p class="calc-card-desc">Compare strength across weight classes</p>
+            <div class="calc-inputs">
+              <div class="calc-field">
+                <label>Lift Weight (kg)</label>
+                <input type="number" id="dotsLiftWeight" class="calc-input" placeholder="140" inputmode="decimal">
+              </div>
+              <div class="calc-field">
+                <label>Body Weight (kg)</label>
+                <input type="number" id="dotsBodyWeight" class="calc-input" placeholder="80" inputmode="decimal">
+              </div>
+              <div class="calc-field">
+                <label>Gender</label>
+                <div class="toggle-group calc-gender" id="dotsGender">
+                  <button data-gender="male" class="active">Male</button>
+                  <button data-gender="female">Female</button>
+                </div>
+              </div>
+              <button class="btn btn-primary calc-btn" id="calcDots">Calculate</button>
+            </div>
+            <div class="calc-result" id="dotsResult" style="display:none;"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Stats Summary -->

@@ -89,11 +89,20 @@ const Haptics = {
 const Sound = {
   _ctx: null,
   _enabled: true,
-  _initialized: false,
 
   init() {
     const saved = Storage.get('barbellPro_sound');
     this._enabled = saved !== false;
+
+    // Persistent listener to resume AudioContext on any user gesture (iOS requirement)
+    const resumeAudio = () => {
+      if (this._ctx && this._ctx.state === 'suspended') {
+        try { this._ctx.resume(); } catch (e) { /* ignore */ }
+      }
+    };
+    document.addEventListener('touchstart', resumeAudio, { passive: true });
+    document.addEventListener('touchend', resumeAudio, { passive: true });
+    document.addEventListener('click', resumeAudio);
   },
 
   get enabled() { return this._enabled; },
@@ -104,7 +113,9 @@ const Sound = {
 
   _ensureContext() {
     if (this._ctx) {
-      if (this._ctx.state === 'suspended') this._ctx.resume();
+      if (this._ctx.state === 'suspended') {
+        try { this._ctx.resume(); } catch (e) { /* ignore */ }
+      }
       return this._ctx;
     }
     try {
@@ -116,13 +127,16 @@ const Sound = {
   },
 
   warmUp() {
-    if (this._initialized) return;
+    // Always try to create/resume context (no _initialized guard — iOS needs repeated attempts)
     this._ensureContext();
-    this._initialized = true;
   },
 
   _play(frequency, duration, type, volume, ramp) {
     if (!this._enabled) return;
+    // Always try to resume on play (iOS suspends aggressively)
+    if (this._ctx && this._ctx.state === 'suspended') {
+      try { this._ctx.resume(); } catch (e) { /* ignore */ }
+    }
     const ctx = this._ensureContext();
     if (!ctx) return;
 
@@ -139,7 +153,7 @@ const Sound = {
 
     const vol = volume || 0.08;
     gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + 0.008);
+    gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
 
     osc.start(ctx.currentTime);
@@ -198,6 +212,32 @@ const Settings = {
       Haptics.enabled = !Haptics.enabled;
       this.syncToggles();
     });
+
+    // Body weight input
+    const bwInput = document.getElementById('bodyWeightInput');
+    const bwToggle = document.getElementById('bwUnitToggle');
+
+    bwInput.addEventListener('change', () => {
+      const val = parseFloat(bwInput.value);
+      if (!isNaN(val) && val > 0) {
+        Storage.set('barbellPro_bodyWeight', val);
+      }
+    });
+
+    bwToggle.addEventListener('click', () => {
+      const currentUnit = Storage.get('barbellPro_bodyWeightUnit') || 'kg';
+      const newUnit = currentUnit === 'kg' ? 'lb' : 'kg';
+      Storage.set('barbellPro_bodyWeightUnit', newUnit);
+      bwToggle.textContent = newUnit;
+
+      // Convert displayed value
+      const val = parseFloat(bwInput.value);
+      if (!isNaN(val) && val > 0) {
+        const converted = newUnit === 'lb' ? Utils.kgToLb(val) : Utils.lbToKg(val);
+        bwInput.value = Math.round(converted * 10) / 10;
+        Storage.set('barbellPro_bodyWeight', parseFloat(bwInput.value));
+      }
+    });
   },
 
   syncToggles() {
@@ -207,6 +247,14 @@ const Settings = {
     soundBtn.setAttribute('aria-checked', String(Sound.enabled));
     vibBtn.classList.toggle('active', Haptics.enabled);
     vibBtn.setAttribute('aria-checked', String(Haptics.enabled));
+
+    // Sync body weight
+    const bwInput = document.getElementById('bodyWeightInput');
+    const bwToggle = document.getElementById('bwUnitToggle');
+    const savedBw = Storage.get('barbellPro_bodyWeight');
+    const savedUnit = Storage.get('barbellPro_bodyWeightUnit') || 'kg';
+    if (savedBw) bwInput.value = savedBw;
+    bwToggle.textContent = savedUnit;
   },
 
   open() {
@@ -280,9 +328,9 @@ const App = {
     Haptics.init();
     Sound.init();
 
-    // Warm up AudioContext on first user interaction (iOS requirement)
-    document.addEventListener('click', () => Sound.warmUp(), { once: true });
-    document.addEventListener('touchstart', () => Sound.warmUp(), { once: true });
+    // Warm up AudioContext on user interaction (iOS resumes need repeated attempts)
+    document.addEventListener('click', () => Sound.warmUp());
+    document.addEventListener('touchstart', () => Sound.warmUp(), { passive: true });
 
     // Initialize modules
     Calculator.init();
