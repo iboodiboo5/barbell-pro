@@ -184,6 +184,14 @@ const Tracker = {
         continue;
       }
 
+      // Check if this line starts a new exercise (Name + Load/Sets/Reps header)
+      // If we already have lines in the block, flush the current exercise first
+      const tabParts = rawLine.split('\t').map(s => s.trim());
+      if (exerciseBlock.length > 0 && tabParts.length >= 4 && tabParts[0] &&
+        /^load$/i.test(tabParts[1]) && /^sets$/i.test(tabParts[2]) && /^reps$/i.test(tabParts[3])) {
+        flushExercise();
+      }
+
       // Accumulate into exercise block
       exerciseBlock.push(rawLine);
     }
@@ -273,6 +281,9 @@ const Tracker = {
       /^reps$/i.test((firstLine[3] || '').trim());
 
     if (hasHeaderRow) {
+      // Capture any remarks on the header line itself (columns 4+)
+      const headerRemarks = firstLine.slice(4).filter(r => r.trim());
+
       // Next line should have the data (possibly with subtitle)
       if (parsedLines.length >= 2) {
         const dataLine = parsedLines[1];
@@ -303,15 +314,30 @@ const Tracker = {
           this.extractExtras(parsedLines[i], remarks, r => youtubeUrl = r);
         }
       }
+
+      // Merge header-line remarks before data-line remarks
+      if (headerRemarks.length > 0) {
+        remarks = headerRemarks.concat(remarks);
+      }
     } else {
       // No header row - check if data is on the same line as the name
       if (firstLine.length >= 4) {
         // Name + Load + Sets + Reps + Remarks on one line
         const maybeLoad = (firstLine[1] || '').trim();
+        const maybeSets = (firstLine[2] || '').trim();
+        const maybeReps = (firstLine[3] || '').trim();
         if (this.looksLikeLoad(maybeLoad) || maybeLoad === '') {
+          // Standard: column 1 is a recognized load format
           load = maybeLoad;
-          sets = (firstLine[2] || '').trim();
-          reps = (firstLine[3] || '').trim();
+          sets = maybeSets;
+          reps = maybeReps;
+          remarks = firstLine.slice(4).filter(r => r.trim());
+        } else if (this.looksLikeSetsReps(maybeSets)) {
+          // Fallback: column 1 is text but columns 2+ look like sets/reps
+          // Treat column 1 as text load (e.g., "less resistance", "go heavy")
+          load = maybeLoad;
+          sets = maybeSets;
+          reps = maybeReps;
           remarks = firstLine.slice(4).filter(r => r.trim());
         }
       }
@@ -321,8 +347,9 @@ const Tracker = {
         const secondLine = parsedLines[1];
         const firstCell = (secondLine[0] || '').trim();
 
-        // If we didn't get load from first line, try second line
-        if (!load && secondLine.length >= 2) {
+        // If we didn't get data from first line, try second line
+        // (check sets too — empty load with valid sets means first line was parsed)
+        if (!load && !sets && secondLine.length >= 2) {
           if (firstCell && !this.looksLikeLoad(firstCell)) {
             subtitle = firstCell;
             load = (secondLine[1] || '').trim();
@@ -390,6 +417,13 @@ const Tracker = {
     str = str.trim();
     // Matches: numbers, numbers with units (kg, lb, p, m), "Done", empty-ish
     return /^(\d+\.?\d*\s*(kg|lb|p|m|min)?|done|\d+p)$/i.test(str) || str === '';
+  },
+
+  looksLikeSetsReps(str) {
+    if (!str) return false;
+    str = str.trim();
+    // Sets/reps always start with a digit (e.g., "5", "12", "2-30 min", "8 plates @10")
+    return /^\d/.test(str);
   },
 
   extractExtras(lineParts, remarks, setUrl) {
