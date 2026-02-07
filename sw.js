@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kk-barbell-v9';
+const CACHE_NAME = 'kk-barbell-v11';
 const PRECACHE_URLS = [
   './',
   './index.html',

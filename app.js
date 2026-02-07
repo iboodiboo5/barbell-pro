@@ -185,88 +185,359 @@ const Sound = {
 
   plateAdd() {
     this._play(900, 0.04, 'triangle', 0.08);
+  },
+
+  timerComplete() {
+    // Triple ascending beep — C5, E5, G5
+    this._play(523, 0.12, 'sine', 0.15);
+    setTimeout(() => this._play(659, 0.12, 'sine', 0.15), 150);
+    setTimeout(() => this._play(784, 0.18, 'sine', 0.18), 300);
   }
 };
 
-// --- Settings ---
-const Settings = {
+// --- Rest Timer ---
+const RestTimer = {
+  _endTime: null,
+  _duration: 0,
+  _intervalId: null,
+  _rafId: null,
+  _isRunning: false,
+  _isExpanded: false,
+  _notificationPermission: false,
+  _dismissTimer: null,
+
+  PRESETS: [
+    { label: '2:00', seconds: 120 },  // "Last" — updated from localStorage
+    { label: '1:00', seconds: 60 },
+    { label: '2:00', seconds: 120 },
+    { label: '2:30', seconds: 150 },
+    { label: '3:00', seconds: 180 },
+    { label: '5:00', seconds: 300 }
+  ],
+
   init() {
-    this.bindEvents();
-    this.syncToggles();
-  },
+    // Load last-used preset
+    const saved = Storage.get('barbellPro_lastRestTime');
+    if (saved && saved > 0) {
+      this.PRESETS[0].seconds = saved;
+      this.PRESETS[0].label = this.formatTime(saved);
+    }
 
-  bindEvents() {
-    document.getElementById('settingsBtn').addEventListener('click', () => this.open());
-    document.getElementById('closeSettings').addEventListener('click', () => this.close());
-    document.getElementById('settingsModal').addEventListener('click', e => {
-      if (e.target === e.currentTarget) this.close();
-    });
-
-    document.getElementById('soundToggle').addEventListener('click', () => {
-      Sound.enabled = !Sound.enabled;
-      this.syncToggles();
+    // Bind timer button
+    document.getElementById('timerBtn').addEventListener('click', () => {
       Haptics.light();
+      this.expand();
     });
 
-    document.getElementById('vibrationToggle').addEventListener('click', () => {
-      Haptics.enabled = !Haptics.enabled;
-      this.syncToggles();
+    // Bind pill tap → expand
+    document.getElementById('restPill').addEventListener('click', () => this.expand());
+
+    // Bind overlay dismiss (tap outside ring)
+    document.getElementById('timerOverlay').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) this.collapse();
     });
 
-    // Body weight input
-    const bwInput = document.getElementById('bodyWeightInput');
-    const bwToggle = document.getElementById('bwUnitToggle');
-
-    bwInput.addEventListener('change', () => {
-      const val = parseFloat(bwInput.value);
-      if (!isNaN(val) && val > 0) {
-        Storage.set('barbellPro_bodyWeight', val);
-      }
+    // Bind stop button
+    document.getElementById('timerStopBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.stop();
     });
 
-    bwToggle.addEventListener('click', () => {
-      const currentUnit = Storage.get('barbellPro_bodyWeightUnit') || 'kg';
-      const newUnit = currentUnit === 'kg' ? 'lb' : 'kg';
-      Storage.set('barbellPro_bodyWeightUnit', newUnit);
-      bwToggle.textContent = newUnit;
+    // Swipe-down to collapse
+    this._setupSwipeDown();
 
-      // Convert displayed value
-      const val = parseFloat(bwInput.value);
-      if (!isNaN(val) && val > 0) {
-        const converted = newUnit === 'lb' ? Utils.kgToLb(val) : Utils.lbToKg(val);
-        bwInput.value = Math.round(converted * 10) / 10;
-        Storage.set('barbellPro_bodyWeight', parseFloat(bwInput.value));
-      }
-    });
+    // Check notification permission
+    if ('Notification' in window && Notification.permission === 'granted') {
+      this._notificationPermission = true;
+    }
   },
 
-  syncToggles() {
-    const soundBtn = document.getElementById('soundToggle');
-    const vibBtn = document.getElementById('vibrationToggle');
-    soundBtn.classList.toggle('active', Sound.enabled);
-    soundBtn.setAttribute('aria-checked', String(Sound.enabled));
-    vibBtn.classList.toggle('active', Haptics.enabled);
-    vibBtn.setAttribute('aria-checked', String(Haptics.enabled));
-
-    // Sync body weight
-    const bwInput = document.getElementById('bodyWeightInput');
-    const bwToggle = document.getElementById('bwUnitToggle');
-    const savedBw = Storage.get('barbellPro_bodyWeight');
-    const savedUnit = Storage.get('barbellPro_bodyWeightUnit') || 'kg';
-    if (savedBw) bwInput.value = savedBw;
-    bwToggle.textContent = savedUnit;
+  formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m + ':' + String(s).padStart(2, '0');
   },
 
-  open() {
-    document.getElementById('settingsModal').classList.add('active');
+  start(seconds) {
+    // Clear any existing timer
+    this._clearTimers();
+
+    // Save as last-used
+    Storage.set('barbellPro_lastRestTime', seconds);
+    this.PRESETS[0].seconds = seconds;
+    this.PRESETS[0].label = this.formatTime(seconds);
+
+    this._duration = seconds;
+    this._endTime = Date.now() + (seconds * 1000);
+    this._isRunning = true;
+
+    // Show pill
+    const pill = document.getElementById('restPill');
+    pill.style.display = '';
+    pill.classList.remove('leaving', 'complete');
+    pill.classList.add('entering');
+    pill.addEventListener('animationend', () => pill.classList.remove('entering'), { once: true });
+
+    // Show timer button indicator
+    document.getElementById('timerBtn').classList.add('running');
+    document.getElementById('timerBtnDot').classList.add('active');
+
+    // Reset pill progress
+    document.getElementById('restPillProgress').style.width = '100%';
+
+    // Request notification permission on first timer start
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(p => {
+        this._notificationPermission = (p === 'granted');
+      });
+    }
+
+    // Start tick loop
+    this._tick();
+
+    // Backup interval for completion detection
+    this._intervalId = setInterval(() => {
+      if (Date.now() >= this._endTime && this._isRunning) {
+        this.complete();
+      }
+    }, 1000);
+
     Haptics.light();
     Sound.tabClick();
   },
 
-  close() {
-    const overlay = document.getElementById('settingsModal');
+  stop() {
+    this._clearTimers();
+    this._isRunning = false;
+
+    // Hide pill
+    const pill = document.getElementById('restPill');
+    pill.classList.remove('complete', 'entering');
+    pill.classList.add('leaving');
+    pill.addEventListener('animationend', () => {
+      pill.style.display = 'none';
+      pill.classList.remove('leaving');
+    }, { once: true });
+
+    // Remove timer button indicator
+    document.getElementById('timerBtn').classList.remove('running');
+    document.getElementById('timerBtnDot').classList.remove('active');
+
+    // Close overlay if expanded
+    if (this._isExpanded) this.collapse();
+
+    Haptics.light();
+    Sound.delete();
+  },
+
+  _clearTimers() {
+    if (this._intervalId) {
+      clearInterval(this._intervalId);
+      this._intervalId = null;
+    }
+    if (this._rafId) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
+    if (this._dismissTimer) {
+      clearTimeout(this._dismissTimer);
+      this._dismissTimer = null;
+    }
+  },
+
+  _tick() {
+    if (!this._isRunning) return;
+
+    const remaining = Math.max(0, Math.ceil((this._endTime - Date.now()) / 1000));
+
+    this._updatePill(remaining);
+    if (this._isExpanded) {
+      this._updateRing(remaining, this._duration);
+    }
+
+    if (remaining <= 0) {
+      this.complete();
+      return;
+    }
+
+    this._rafId = requestAnimationFrame(() => this._tick());
+  },
+
+  complete() {
+    this._isRunning = false;
+    this._clearTimers();
+
+    // Sound + haptics
+    Sound.timerComplete();
+    Haptics.warning();
+
+    // Update pill to "REST OVER"
+    const pill = document.getElementById('restPill');
+    const pillText = document.getElementById('restPillText');
+    const pillProgress = document.getElementById('restPillProgress');
+    pillText.textContent = 'REST OVER';
+    pillProgress.style.width = '0%';
+    pill.classList.add('complete');
+
+    // If expanded, update ring to done
+    if (this._isExpanded) {
+      document.getElementById('timerRingProgress').classList.add('complete');
+      document.getElementById('timerDigits').textContent = 'DONE';
+    }
+
+    // Remove timer button running state
+    document.getElementById('timerBtn').classList.remove('running');
+
+    // Send notification if backgrounded
+    if (document.hidden && this._notificationPermission) {
+      try {
+        new Notification('Rest Over', {
+          body: 'Time to get back to work!',
+          tag: 'rest-timer'
+        });
+      } catch (e) { /* ignore */ }
+    }
+
+    // Auto-dismiss after 3 seconds
+    this._dismissTimer = setTimeout(() => {
+      if (this._isExpanded) this.collapse();
+
+      pill.classList.remove('complete');
+      pill.classList.add('leaving');
+      pill.addEventListener('animationend', () => {
+        pill.style.display = 'none';
+        pill.classList.remove('leaving');
+      }, { once: true });
+
+      document.getElementById('timerBtnDot').classList.remove('active');
+    }, 3000);
+  },
+
+  expand() {
+    this._isExpanded = true;
+    const overlay = document.getElementById('timerOverlay');
+    overlay.style.display = 'flex';
+    overlay.classList.add('active');
+    overlay.classList.remove('closing');
+
+    // Render preset buttons
+    this._renderPresets();
+
+    // Sync ring state
+    const ring = document.getElementById('timerRingProgress');
+    ring.classList.remove('complete');
+
+    if (this._isRunning) {
+      const remaining = Math.max(0, Math.ceil((this._endTime - Date.now()) / 1000));
+      this._updateRing(remaining, this._duration);
+      document.getElementById('timerDigits').textContent = this.formatTime(remaining);
+      // Show stop button
+      document.getElementById('timerStopBtn').style.display = '';
+    } else {
+      // Show last-used duration as default (full ring)
+      const defaultTime = this.PRESETS[0].seconds;
+      document.getElementById('timerDigits').textContent = this.formatTime(defaultTime);
+      this._updateRing(defaultTime, defaultTime);
+      // Hide stop button when no timer running
+      document.getElementById('timerStopBtn').style.display = 'none';
+    }
+
+    Haptics.light();
+  },
+
+  collapse() {
+    this._isExpanded = false;
+    const overlay = document.getElementById('timerOverlay');
     overlay.classList.add('closing');
-    setTimeout(() => overlay.classList.remove('active', 'closing'), 250);
+
+    const onEnd = () => {
+      overlay.style.display = 'none';
+      overlay.classList.remove('active', 'closing');
+      overlay.removeEventListener('animationend', onEnd);
+    };
+    overlay.addEventListener('animationend', onEnd);
+
+    // Fallback if animation doesn't fire
+    setTimeout(onEnd, 350);
+  },
+
+  _updatePill(remaining) {
+    document.getElementById('restPillText').textContent = this.formatTime(remaining);
+    const pct = this._duration > 0 ? (remaining / this._duration) * 100 : 0;
+    document.getElementById('restPillProgress').style.width = pct + '%';
+  },
+
+  _updateRing(remaining, total) {
+    const circumference = 2 * Math.PI * 90; // r=90 → 565.49
+    const progress = total > 0 ? 1 - (remaining / total) : 0; // 0→1 as time passes
+    const offset = circumference * (1 - progress);
+    document.getElementById('timerRingProgress').style.strokeDashoffset = offset;
+    document.getElementById('timerDigits').textContent = this.formatTime(remaining);
+  },
+
+  _renderPresets() {
+    const container = document.getElementById('timerPresets');
+    container.innerHTML = this.PRESETS.map((p, i) => {
+      const isActive = this._isRunning && this._duration === p.seconds;
+      const label = i === 0 ? 'Last: ' + p.label : p.label;
+      return `<button class="timer-preset-btn ${isActive ? 'active' : ''}" data-seconds="${p.seconds}" data-index="${i}">${label}</button>`;
+    }).join('');
+
+    // Set up delegation once (not on every render)
+    if (!container._bound) {
+      container._bound = true;
+      container.addEventListener('click', (e) => {
+        const btn = e.target.closest('.timer-preset-btn');
+        if (!btn) return;
+        const seconds = parseInt(btn.dataset.seconds);
+        if (seconds > 0) {
+          this.start(seconds);
+          // Re-render presets to update active state
+          this._renderPresets();
+          // Show stop button now that timer is running
+          document.getElementById('timerStopBtn').style.display = '';
+        }
+      });
+    }
+  },
+
+  _setupSwipeDown() {
+    const overlay = document.getElementById('timerOverlay');
+    let startY = 0;
+    let deltaY = 0;
+    let tracking = false;
+
+    overlay.addEventListener('touchstart', (e) => {
+      // Only track if touching the overlay background, not buttons/ring
+      if (e.target === overlay || e.target.closest('.timer-ring-container')) {
+        startY = e.touches[0].clientY;
+        tracking = true;
+        deltaY = 0;
+      }
+    }, { passive: true });
+
+    overlay.addEventListener('touchmove', (e) => {
+      if (!tracking) return;
+      deltaY = e.touches[0].clientY - startY;
+      if (deltaY > 0) {
+        // Visual feedback: slight translate down
+        const container = document.getElementById('timerRingContainer');
+        container.style.transform = `translateY(${Math.min(deltaY * 0.3, 40)}px)`;
+        container.style.transition = 'none';
+      }
+    }, { passive: true });
+
+    overlay.addEventListener('touchend', () => {
+      if (!tracking) return;
+      tracking = false;
+      const container = document.getElementById('timerRingContainer');
+      container.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      container.style.transform = '';
+
+      if (deltaY > 80) {
+        this.collapse();
+      }
+    });
   }
 };
 
@@ -337,7 +608,7 @@ const App = {
     Tracker.init();
     Notes.init();
     Analytics.init();
-    Settings.init();
+    RestTimer.init();
   },
 
   registerServiceWorker() {

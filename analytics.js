@@ -731,7 +731,7 @@ const Analytics = {
       });
     }
 
-    // DOTS Calculator — prefill body weight from settings
+    // DOTS Calculator — prefill body weight from localStorage
     const dotsBodyWeight = document.getElementById('dotsBodyWeight');
     if (dotsBodyWeight) {
       const savedBw = Storage.get('barbellPro_bodyWeight');
@@ -740,6 +740,15 @@ const Analytics = {
         // Always show in kg for DOTS
         dotsBodyWeight.value = savedUnit === 'lb' ? Utils.lbToKg(savedBw) : savedBw;
       }
+
+      // Auto-save body weight when user types it (replaces old Settings modal save)
+      dotsBodyWeight.addEventListener('change', () => {
+        const val = parseFloat(dotsBodyWeight.value);
+        if (!isNaN(val) && val > 0) {
+          Storage.set('barbellPro_bodyWeight', val);
+          Storage.set('barbellPro_bodyWeightUnit', 'kg');
+        }
+      });
     }
 
     const calcDots = document.getElementById('calcDots');
