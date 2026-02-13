@@ -1,5 +1,5 @@
 /* ============================================
-   KK BARBELL - Calculator Module (Mixed Plates)
+   OK BARBELL - Calculator Module (Mixed Plates)
    ============================================ */
 
 const PLATES = {
@@ -203,7 +203,7 @@ const Calculator = {
       <div class="plate-buttons-row">
         ${PLATES.kg.map(w => {
           const color = getPlateColor(w, 'kg');
-          return `<button class="plate-btn" data-weight="${w}" data-unit="kg">
+          return `<button class="plate-btn" data-weight="${w}" data-unit="kg" aria-label="Add ${w} kilogram plate">
             <span class="plate-btn-bar" style="background:${color}"></span>
             ${w}<span class="plate-unit">KG</span>
           </button>`;
@@ -214,7 +214,7 @@ const Calculator = {
       <div class="plate-buttons-row">
         ${PLATES.lb.map(w => {
           const color = getPlateColor(w, 'lb');
-          return `<button class="plate-btn" data-weight="${w}" data-unit="lb">
+          return `<button class="plate-btn" data-weight="${w}" data-unit="lb" aria-label="Add ${w} pound plate">
             <span class="plate-btn-bar" style="background:${color}"></span>
             ${w}<span class="plate-unit">LB</span>
           </button>`;
@@ -228,7 +228,7 @@ const Calculator = {
     const container = document.getElementById('barWeightOptions');
 
     container.innerHTML = BAR_WEIGHTS_KG.map(w =>
-      `<button class="bar-weight-btn ${w === this.state.barWeight ? 'active' : ''}" data-bw="${w}">${w}kg</button>`
+      `<button class="bar-weight-btn ${w === this.state.barWeight ? 'active' : ''}" data-bw="${w}" aria-label="Set bar weight to ${w} kilograms">${w}kg</button>`
     ).join('');
 
     container.querySelectorAll('.bar-weight-btn').forEach(btn => {

@@ -1,5 +1,5 @@
 /* ============================================
-   KK BARBELL - Design System & Styles
+   OK BARBELL - Design System & Styles
    ============================================ */
 
 :root {
@@ -50,6 +50,16 @@
   --sar: env(safe-area-inset-right);
   --sab: env(safe-area-inset-bottom);
   --sal: env(safe-area-inset-left);
+  --sab-ui: clamp(8px, var(--sab), 20px);
+  --tab-bar-core-height: 58px;
+  --tab-bar-height: calc(var(--tab-bar-core-height) + var(--sab-ui));
+
+  /* Motion */
+  --motion-fast: 0.16s;
+  --motion-base: 0.24s;
+  --motion-slow: 0.38s;
+  --ease-standard: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* ============================================
@@ -73,7 +83,10 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--bg-primary);
+  background:
+    radial-gradient(140% 90% at 20% -10%, rgba(233, 69, 96, 0.12), transparent 55%),
+    radial-gradient(120% 80% at 90% -20%, rgba(52, 152, 219, 0.12), transparent 58%),
+    var(--bg-primary);
   color: var(--text-primary);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -81,7 +94,8 @@ body {
   padding-top: var(--sat);
   padding-left: var(--sal);
   padding-right: var(--sar);
-  padding-bottom: calc(70px + var(--sab));
+  min-height: 100dvh;
+  padding-bottom: calc(var(--tab-bar-height) + 8px);
   line-height: 1.5;
 }
 
@@ -151,14 +165,14 @@ button:active {
   bottom: 0;
   left: 0;
   right: 0;
-  height: calc(70px + var(--sab));
-  padding-bottom: var(--sab);
+  height: var(--tab-bar-height);
+  padding-bottom: var(--sab-ui);
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
   display: flex;
-  justify-content: space-around;
-  align-items: flex-start;
-  padding-top: 6px;
+  justify-content: space-between;
+  align-items: stretch;
+  padding-top: 2px;
   z-index: 100;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -167,15 +181,18 @@ button:active {
 .tab-btn {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   background: none;
   color: var(--text-tertiary);
-  padding: 8px 12px;
-  min-width: 56px;
+  padding: 6px 6px 4px;
+  min-width: 0;
+  flex: 1;
   transition: color 0.2s;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
+  line-height: 1.1;
 }
 
 .tab-btn:active {
@@ -625,6 +642,9 @@ button:active {
    ============================================ */
 
 .section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 8px 0 16px;
 }
 
@@ -679,6 +699,22 @@ button:active {
 /* Upload Area */
 .upload-area {
   margin-bottom: 16px;
+}
+
+.tracker-back-btn {
+  background: rgba(233, 69, 96, 0.12);
+  color: var(--accent-primary);
+  border: 1px solid rgba(233, 69, 96, 0.4);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.tracker-timer-dock {
+  margin-bottom: 14px;
+  animation: riseIn var(--motion-slow) var(--ease-standard);
 }
 
 /* Day Tabs */
@@ -750,6 +786,12 @@ button:active {
 .exercise-card.completed {
   opacity: 0.6;
   transition: opacity 0.4s ease;
+}
+
+.exercise-card.analytics-focus {
+  border-color: rgba(52, 152, 219, 0.65);
+  box-shadow: 0 0 0 1px rgba(52, 152, 219, 0.35), 0 10px 28px rgba(52, 152, 219, 0.18);
+  animation: analyticsFocusPulse 0.9s var(--ease-standard) 2 alternate;
 }
 
 .exercise-card.completed .exercise-name {
@@ -1425,11 +1467,15 @@ button:active {
 
 /* Consistency Card */
 .consistency-card {
-  background: var(--bg-secondary);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)),
+    rgba(22, 33, 62, 0.85);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 18px;
   margin-bottom: 16px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
+  animation: riseIn var(--motion-slow) var(--ease-standard);
 }
 
 .consistency-header {
@@ -1446,7 +1492,7 @@ button:active {
 }
 
 .consistency-rate {
-  font-size: 28px;
+  font-size: 34px;
   font-weight: 800;
   line-height: 1;
 }
@@ -1456,6 +1502,7 @@ button:active {
 .consistency-rate.rate-red { color: var(--accent-primary); }
 
 .consistency-grid {
+  margin-top: 10px;
   display: flex;
   gap: 6px;
   overflow-x: auto;
@@ -1477,15 +1524,15 @@ button:active {
 }
 
 .consistency-cell {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 11px;
   font-weight: 700;
-  transition: transform 0.15s;
+  transition: transform var(--motion-fast) var(--ease-standard);
 }
 
 .consistency-cell:active {
@@ -1503,15 +1550,15 @@ button:active {
 .consistency-cell.level-0 .cell-count { color: var(--text-tertiary); }
 
 .consistency-cell.level-1 {
-  background: rgba(46, 204, 113, 0.15);
+  background: rgba(52, 152, 219, 0.18);
 }
 
 .consistency-cell.level-2 {
-  background: rgba(46, 204, 113, 0.35);
+  background: rgba(52, 152, 219, 0.4);
 }
 
 .consistency-cell.level-3 {
-  background: rgba(46, 204, 113, 0.6);
+  background: rgba(240, 192, 64, 0.65);
 }
 
 .consistency-cell.level-4 {
@@ -1530,7 +1577,7 @@ button:active {
   margin-top: 12px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--accent-warm);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1542,8 +1589,92 @@ button:active {
 
 .streak-msg {
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-weight: 500;
+}
+
+.consistency-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.consistency-kpi {
+  background: rgba(15, 52, 96, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.consistency-kpi-label {
+  display: block;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.45px;
+}
+
+.consistency-kpi-value {
+  display: block;
+  margin-top: 2px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.consistency-trend-title {
+  margin-top: 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.consistency-settings-card {
+  margin: 8px 0 16px;
+  background:
+    linear-gradient(140deg, rgba(52, 152, 219, 0.12), rgba(233, 69, 96, 0.06)),
+    rgba(34, 34, 68, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius);
+  padding: 16px;
+  animation: riseIn var(--motion-slow) var(--ease-standard);
+}
+
+.consistency-settings-card h3 {
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.consistency-settings-card p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.consistency-settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.consistency-setting span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: 5px;
+}
+
+.consistency-setting input {
+  width: 100%;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: rgba(22, 33, 62, 0.8);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
 }
 
 /* Lift Search Bar */
@@ -1623,6 +1754,7 @@ button:active {
   padding: 16px;
   margin-bottom: 16px;
   border: 1px solid var(--border);
+  animation: riseIn var(--motion-slow) var(--ease-standard);
 }
 
 .chart-title {
@@ -1651,8 +1783,8 @@ button:active {
   z-index: 20;
   transform: translateX(-50%);
   box-shadow: 0 4px 16px var(--shadow);
-  animation: fadeIn 0.15s ease;
-  pointer-events: none;
+  animation: fadeIn var(--motion-fast) var(--ease-standard);
+  pointer-events: auto;
 }
 
 .chart-tooltip-label {
@@ -1672,144 +1804,6 @@ button:active {
   font-size: 12px;
   color: var(--text-secondary);
   margin-top: 2px;
-}
-
-/* Strength Calculators */
-.calculators-section {
-  margin-bottom: 16px;
-}
-
-.calculators-header {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 15px;
-  font-weight: 600;
-  transition: background 0.15s;
-}
-
-.calculators-header:active {
-  background: var(--bg-surface);
-  transform: none;
-}
-
-.calculators-header .calc-arrow {
-  transition: transform 0.3s ease;
-  color: var(--text-tertiary);
-}
-
-.calculators-header.open .calc-arrow {
-  transform: rotate(180deg);
-}
-
-.calculators-body {
-  margin-top: 8px;
-}
-
-.calc-card {
-  background: var(--bg-secondary);
-  border-radius: var(--radius);
-  padding: 16px;
-  margin-bottom: 10px;
-  border: 1px solid var(--border);
-}
-
-.calc-card-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.calc-card-desc {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-bottom: 14px;
-}
-
-.calc-inputs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: flex-end;
-}
-
-.calc-field {
-  flex: 1;
-  min-width: 80px;
-}
-
-.calc-field label {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 6px;
-}
-
-.calc-input {
-  width: 100%;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  font-size: 15px;
-  font-family: inherit;
-  font-weight: 600;
-  text-align: center;
-  outline: none;
-}
-
-.calc-input:focus {
-  border-color: var(--accent-primary);
-}
-
-.calc-btn {
-  padding: 10px 20px;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.calc-gender {
-  width: 100%;
-}
-
-.calc-result {
-  margin-top: 14px;
-  padding: 14px;
-  background: var(--bg-surface);
-  border-radius: var(--radius-sm);
-  border-left: 3px solid var(--accent-green);
-}
-
-.calc-result-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
-}
-
-.calc-result-value {
-  font-size: 24px;
-  font-weight: 800;
-  color: var(--accent-green);
-}
-
-.calc-result-detail {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-top: 4px;
 }
 
 /* Analytics Stats */
@@ -1841,59 +1835,6 @@ button:active {
   margin-top: 4px;
 }
 
-/* History Table */
-.history-section {
-  margin-bottom: 20px;
-}
-
-.history-table {
-  background: var(--bg-secondary);
-  border-radius: var(--radius);
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
-
-.history-row {
-  display: grid;
-  grid-template-columns: 1fr 0.7fr 0.8fr 0.8fr;
-  padding: 10px 14px;
-  font-size: 13px;
-  border-bottom: 1px solid var(--border);
-  align-items: center;
-}
-
-.history-row:last-child {
-  border-bottom: none;
-}
-
-.history-row.header {
-  font-weight: 600;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  background: var(--bg-surface);
-}
-
-.history-row .date {
-  color: var(--text-secondary);
-}
-
-.history-row .weight {
-  color: var(--accent-primary);
-  font-weight: 600;
-}
-
-.history-row .sets-reps {
-  color: var(--text-secondary);
-}
-
-.history-row .volume {
-  color: var(--text-primary);
-  font-weight: 600;
-  text-align: right;
-}
-
 /* ============================================
    RESPONSIVE
    ============================================ */
@@ -1913,6 +1854,10 @@ button:active {
 
   .plate {
     width: 13px;
+  }
+
+  .consistency-settings-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1943,7 +1888,7 @@ button:active {
   display: none;
   flex-direction: column;
   overflow: hidden;
-  height: calc(100vh - 70px - var(--sab) - var(--sat));
+  height: calc(100vh - var(--tab-bar-height) - var(--sat));
   padding: 16px;
 }
 
@@ -2036,43 +1981,56 @@ button:active {
    REST TIMER
    ============================================ */
 
-/* Timer Button (top-right, replaces settings) */
+/* Timer Button (tracker dock) */
 .timer-btn {
-  position: fixed;
-  top: calc(12px + var(--sat));
-  right: calc(12px + var(--sar));
-  z-index: 90;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--bg-surface);
-  color: var(--text-tertiary);
+  position: relative;
+  width: 100%;
+  border-radius: 14px;
+  background:
+    linear-gradient(120deg, rgba(52, 152, 219, 0.14), rgba(233, 69, 96, 0.09)),
+    var(--bg-surface);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  transition: color 0.2s, background 0.2s;
-  padding: 0;
+  justify-content: flex-start;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard);
+  padding: 12px 14px;
 }
 
 .timer-btn:active {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  transform: scale(0.9);
+  transform: scale(0.98);
 }
 
 .timer-btn.running {
   color: var(--accent-green);
-  border-color: rgba(46, 204, 113, 0.3);
+  border-color: rgba(46, 204, 113, 0.45);
+  box-shadow: 0 0 0 1px rgba(46, 204, 113, 0.2), 0 8px 24px rgba(46, 204, 113, 0.18);
+}
+
+.timer-btn-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timer-btn-label {
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .timer-btn-dot {
   display: none;
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 6px;
-  height: 6px;
+  top: 9px;
+  right: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--accent-green);
   animation: timerBtnPulse 1.5s ease-in-out infinite;
@@ -2164,16 +2122,16 @@ button:active {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 32px;
-  padding: calc(40px + var(--sat)) 20px calc(40px + var(--sab));
+  gap: 22px;
+  padding: calc(24px + var(--sat)) 20px calc(28px + var(--sab));
 }
 
 .timer-overlay.active {
-  animation: timerOverlayIn 0.3s ease forwards;
+  animation: timerOverlayIn var(--motion-base) var(--ease-standard) forwards;
 }
 
 .timer-overlay.closing {
-  animation: timerOverlayOut 0.25s ease forwards;
+  animation: timerOverlayOut var(--motion-base) var(--ease-standard) forwards;
 }
 
 @keyframes timerOverlayIn {
@@ -2194,6 +2152,96 @@ button:active {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.timer-setup-panel,
+.timer-running-panel {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.timer-setup-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.timer-wheel-wrap {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.timer-wheel-column {
+  background: rgba(22, 33, 62, 0.64);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.timer-wheel-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.55px;
+  margin-bottom: 8px;
+}
+
+.timer-wheel {
+  max-height: 168px;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  padding: 56px 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.timer-wheel::-webkit-scrollbar {
+  display: none;
+}
+
+.timer-wheel-item {
+  scroll-snap-align: center;
+  min-height: 28px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  transition: color var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard);
+}
+
+.timer-wheel-item.active {
+  color: var(--text-primary);
+  transform: scale(1.08);
+}
+
+.timer-start-btn {
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: 12px;
+  background: var(--accent-primary);
+  color: #fff;
+  border: 1px solid transparent;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.timer-running-panel {
+  gap: 18px;
+}
+
+.timer-running-panel {
+  gap: 18px;
 }
 
 .timer-ring {
@@ -2296,8 +2344,8 @@ button:active {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: center;
-  max-width: 340px;
-  margin-top: 8px;
+  max-width: 100%;
+  margin-top: 2px;
 }
 
 .timer-preset-btn {
@@ -2305,7 +2353,7 @@ button:active {
   border-radius: var(--radius-pill);
   background: var(--bg-surface);
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   border: 1px solid var(--border);
@@ -2332,7 +2380,7 @@ button:active {
 
 /* Press feedback on tappable cards */
 .exercise-card {
-  transition: transform 0.1s ease, opacity 0.3s ease;
+  transition: transform var(--motion-fast) var(--ease-standard), opacity var(--motion-base) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
 }
 
 .exercise-card:active {
@@ -2353,7 +2401,7 @@ button:active {
 
 .stat-card:active {
   transform: scale(0.97);
-  transition: transform 0.1s ease;
+  transition: transform var(--motion-fast) var(--ease-standard);
 }
 
 /* Completion toggle bounce animation */
@@ -2422,6 +2470,16 @@ button:active {
 @keyframes shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
+}
+
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes analyticsFocusPulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.015); }
 }
 
 .chart-skeleton {
@@ -2496,6 +2554,17 @@ button:active {
 
 .update-btn:active {
   transform: scale(0.95);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ============================================

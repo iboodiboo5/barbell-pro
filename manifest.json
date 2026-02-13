@@ -1,6 +1,6 @@
 {
-  "name": "KK Barbell",
-  "short_name": "KK Barbell",
+  "name": "OK Barbell",
+  "short_name": "OK Barbell",
   "description": "Barbell weight calculator, workout tracker & lift analytics",
   "start_url": "./index.html",
   "scope": "./",

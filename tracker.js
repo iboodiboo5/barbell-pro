@@ -1,10 +1,11 @@
 /* ============================================
-   KK BARBELL - Workout Tracker Module
+   OK BARBELL - Workout Tracker Module
    ============================================ */
 
 const Tracker = {
   data: { weeks: [], currentWeekIndex: -1 },
   currentDayIndex: 0,
+  _analyticsFocusExerciseId: null,
 
   init() {
     this.loadData();
@@ -657,6 +658,40 @@ const Tracker = {
     this.renderExercises();
   },
 
+  openFromAnalyticsRef(ref) {
+    if (!ref) return;
+
+    let weekIndex = Number.isInteger(ref.weekIndex) ? ref.weekIndex : -1;
+    let dayIndex = Number.isInteger(ref.dayIndex) ? ref.dayIndex : -1;
+
+    // Fallback when indexes are stale: resolve by exact date.
+    if ((weekIndex < 0 || dayIndex < 0) && ref.date) {
+      for (let wi = 0; wi < this.data.weeks.length; wi++) {
+        const week = this.data.weeks[wi];
+        for (let di = 0; di < (week.days || []).length; di++) {
+          if ((week.days[di].date || '').trim() === ref.date) {
+            weekIndex = wi;
+            dayIndex = di;
+            break;
+          }
+        }
+        if (weekIndex >= 0 && dayIndex >= 0) break;
+      }
+    }
+
+    if (weekIndex < 0 || dayIndex < 0 || !this.data.weeks[weekIndex] || !this.data.weeks[weekIndex].days[dayIndex]) {
+      Toast.show('Workout reference not found');
+      return;
+    }
+
+    this.data.currentWeekIndex = weekIndex;
+    this.currentDayIndex = dayIndex;
+    this._analyticsFocusExerciseId = ref.exerciseId || null;
+    this.saveData();
+    this.renderWeekTimeline();
+    this.renderCurrentWeek();
+  },
+
   renderDayTabs() {
     const week = this.data.weeks[this.data.currentWeekIndex];
     if (!week) return;
@@ -736,7 +771,7 @@ const Tracker = {
           <h3>No Exercises</h3>
           <p>Add exercises or upload workout data</p>
         </div>
-        <button class="add-exercise-btn" id="addExerciseBtn">+ Add Exercise</button>
+        <button class="add-exercise-btn" id="addExerciseBtn" aria-label="Add a new exercise">+ Add Exercise</button>
       `;
       const addBtn = document.getElementById('addExerciseBtn');
       if (addBtn) addBtn.addEventListener('click', () => this.openEditModal(-1));
@@ -751,7 +786,8 @@ const Tracker = {
       const setsDisplay = ex.sets || '--';
       const repsDisplay = ex.reps || '--';
       const isCompound = this.isBarbellCompound(ex.name);
-      const cardClass = `exercise-card ${ex.completed ? 'completed' : ''} ${isCompound ? 'compound' : 'accessory'}`;
+      const isAnalyticsFocus = this._analyticsFocusExerciseId && ex.id === this._analyticsFocusExerciseId;
+      const cardClass = `exercise-card ${ex.completed ? 'completed' : ''} ${isCompound ? 'compound' : 'accessory'} ${isAnalyticsFocus ? 'analytics-focus' : ''}`;
 
       return `<div class="exercise-card-wrapper" data-exercise-index="${i}">
         <div class="swipe-complete-bg">
@@ -793,7 +829,7 @@ const Tracker = {
     }).join('');
 
     // Add "Add Exercise" button at the bottom
-    container.innerHTML += `<button class="add-exercise-btn" id="addExerciseBtn">+ Add Exercise</button>`;
+    container.innerHTML += `<button class="add-exercise-btn" id="addExerciseBtn" aria-label="Add a new exercise">+ Add Exercise</button>`;
 
     // Bind completion toggles (targeted update — no full rerender)
     container.querySelectorAll('.complete-toggle').forEach(btn => {
@@ -854,6 +890,19 @@ const Tracker = {
     const addBtn = document.getElementById('addExerciseBtn');
     if (addBtn) {
       addBtn.addEventListener('click', () => this.openEditModal(-1));
+    }
+
+    if (this._analyticsFocusExerciseId) {
+      const focusCard = container.querySelector('.exercise-card.analytics-focus');
+      if (focusCard) {
+        focusCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => {
+          focusCard.classList.remove('analytics-focus');
+          this._analyticsFocusExerciseId = null;
+        }, 2200);
+      } else {
+        this._analyticsFocusExerciseId = null;
+      }
     }
   },
 
@@ -930,14 +979,14 @@ const Tracker = {
     const dropdown = document.createElement('div');
     dropdown.className = 'kebab-dropdown';
     dropdown.innerHTML = `
-      <button class="kebab-option edit-option" data-action="edit">
+      <button class="kebab-option edit-option" data-action="edit" aria-label="Edit exercise">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
         </svg>
         Edit
       </button>
-      <button class="kebab-option delete-option" data-action="delete">
+      <button class="kebab-option delete-option" data-action="delete" aria-label="Delete exercise">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
         </svg>
@@ -992,8 +1041,8 @@ const Tracker = {
       <div class="delete-confirm-content">
         <span>Delete "${Utils.escapeHtml(exerciseName)}"?</span>
         <div class="delete-confirm-actions">
-          <button class="btn-confirm-delete">Delete</button>
-          <button class="btn-cancel-delete">Cancel</button>
+          <button class="btn-confirm-delete" aria-label="Confirm delete exercise">Delete</button>
+          <button class="btn-cancel-delete" aria-label="Cancel exercise delete">Cancel</button>
         </div>
       </div>
     `;
@@ -1041,7 +1090,7 @@ const Tracker = {
     toast.className = 'toast undo-toast';
     toast.innerHTML = `
       <span>"${Utils.escapeHtml(name)}" deleted</span>
-      <button class="undo-toast-btn">Undo</button>
+      <button class="undo-toast-btn" aria-label="Undo deleted exercise">Undo</button>
     `;
     container.appendChild(toast);
 

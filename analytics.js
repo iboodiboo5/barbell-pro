@@ -1,5 +1,5 @@
 /* ============================================
-   KK BARBELL - Lift Analytics Module
+   OK BARBELL - Lift Analytics Module
    ============================================ */
 
 // LIFT_GROUPS is defined in app.js (shared constant)
@@ -7,10 +7,11 @@
 const Analytics = {
   selectedLift: null,
   liftData: {},
+  _lastTooltipState: null,
+  _consistencySettingsBound: false,
 
   init() {
-    // Bind calculator events once
-    this.initCalculators();
+    // Analytics bootstraps through refresh().
   },
 
   refresh() {
@@ -41,7 +42,6 @@ const Analytics = {
       this.renderLiftSelector();
       this.renderCharts();
       this.renderStats();
-      this.renderHistory();
 
       // Remove skeleton after rendering
       chartContainers.forEach(c => c.classList.remove('skeleton', 'chart-skeleton'));
@@ -58,89 +58,50 @@ const Analytics = {
   },
 
   renderConsistency() {
-    const TARGET_DAYS = 4;
     const section = document.getElementById('consistencySection');
+    const settingsCard = document.getElementById('consistencySettingsCard');
     const workouts = Storage.get('barbellPro_workouts');
 
     if (!workouts || !workouts.weeks || workouts.weeks.length === 0) {
       section.style.display = 'none';
+      if (settingsCard) settingsCard.style.display = 'none';
       return;
     }
 
-    // Collect all dates and completed dates across every programmed week
-    const allDates = new Set();
-    const completedDates = new Set();
+    this._bindConsistencySettings();
+    const settings = this._getConsistencySettings(workouts);
+    const timeline = this._buildSessionTimeline(workouts, settings.startDate);
+    const sessionDates = timeline
+      .filter(d => d.completed)
+      .map(d => d.isoDate);
 
-    for (const week of workouts.weeks) {
-      if (!week.days) continue;
-      for (const day of week.days) {
-        if (!day.date || !day.date.trim()) continue;
-        const dateStr = day.date.trim();
-        allDates.add(dateStr);
-        if (day.exercises && day.exercises.some(ex => ex.completed)) {
-          completedDates.add(dateStr);
-        }
-      }
-    }
-
-    if (allDates.size === 0) {
-      section.style.display = 'none';
-      return;
-    }
+    const completedDates = new Set(sessionDates);
+    const completedCount = completedDates.size;
 
     section.style.display = '';
+    if (settingsCard) settingsCard.style.display = '';
 
-    // Find date range (earliest → latest across all days)
-    const sortedDates = [...allDates].sort();
-    const firstDate = new Date(sortedDates[0] + 'T00:00:00');
-    const lastDate = new Date(sortedDates[sortedDates.length - 1] + 'T00:00:00');
-
-    // Build every calendar week from first to last date
-    const weekMap = new Map(); // weekKey → count of completed sessions
-    const weekOrder = []; // ordered week keys
-
-    // Walk day-by-day from firstDate to lastDate to discover all calendar weeks
-    const cursor = new Date(firstDate);
-    while (cursor <= lastDate) {
-      const iso = cursor.toISOString().slice(0, 10);
-      const weekKey = this._getISOWeekKey(iso);
-      if (!weekMap.has(weekKey)) {
-        weekMap.set(weekKey, 0);
-        weekOrder.push(weekKey);
-      }
-      cursor.setDate(cursor.getDate() + 1);
-    }
-
-    // Count completed sessions per calendar week
-    for (const dateStr of completedDates) {
-      const weekKey = this._getISOWeekKey(dateStr);
-      if (weekMap.has(weekKey)) {
-        weekMap.set(weekKey, weekMap.get(weekKey) + 1);
-      }
-    }
-
-    // Build week data array
-    const weekData = weekOrder.map(key => ({
-      key,
-      completed: weekMap.get(key)
-    }));
-
-    // Overall completion rate: completed sessions / (calendar weeks × target)
-    const totalCompleted = weekData.reduce((sum, w) => sum + w.completed, 0);
-    const totalPossible = weekData.length * TARGET_DAYS;
-    const completionRate = totalPossible > 0 ? Math.round((totalCompleted / totalPossible) * 100) : 0;
+    const elapsedDays = this._elapsedDaysSince(settings.startDate);
+    const expectedSessions = (settings.baselineDays * elapsedDays) / 7;
+    const completionRate = expectedSessions > 0
+      ? Math.round((completedCount / expectedSessions) * 100)
+      : 0;
 
     const rateEl = document.getElementById('consistencyRate');
     rateEl.textContent = completionRate + '%';
     rateEl.className = 'consistency-rate';
-    if (completionRate >= 90) rateEl.classList.add('rate-green');
-    else if (completionRate >= 70) rateEl.classList.add('rate-gold');
+    if (completionRate >= 100) rateEl.classList.add('rate-green');
+    else if (completionRate >= 75) rateEl.classList.add('rate-gold');
     else rateEl.classList.add('rate-red');
 
-    // Heatmap grid — one cell per calendar week
+    document.getElementById('consistencyCompleted').textContent = String(completedCount);
+    const missedSessions = Math.ceil(Math.max(0, expectedSessions - completedCount));
+    document.getElementById('consistencyMissed').textContent = String(missedSessions);
+
+    const trendWeeks = this._buildTrendWeeks(completedDates, settings.baselineDays);
     const grid = document.getElementById('consistencyGrid');
-    grid.innerHTML = weekData.map((w, i) => {
-      const ratio = w.completed / TARGET_DAYS;
+    grid.innerHTML = trendWeeks.map((w, i) => {
+      const ratio = settings.baselineDays > 0 ? (w.completed / settings.baselineDays) : 0;
       let level = 0;
       if (ratio >= 1) level = 4;
       else if (ratio >= 0.75) level = 3;
@@ -148,37 +109,163 @@ const Analytics = {
       else if (ratio > 0) level = 1;
 
       return `<div class="consistency-cell-group">
-        <div class="consistency-cell level-${level}" title="Week ${i + 1}: ${w.completed}/${TARGET_DAYS} sessions">
+        <div class="consistency-cell level-${level}" title="${Utils.escapeHtml(w.label)}: ${w.completed}/${settings.baselineDays}">
           <span class="cell-count">${w.completed}</span>
         </div>
         <div class="consistency-cell-label">W${i + 1}</div>
       </div>`;
     }).join('');
 
-    // Streak: consecutive calendar weeks (from most recent) hitting target
     const streakEl = document.getElementById('consistencyStreak');
     let streak = 0;
-    for (let i = weekData.length - 1; i >= 0; i--) {
-      if (weekData[i].completed >= TARGET_DAYS) {
+    for (let i = trendWeeks.length - 1; i >= 0; i--) {
+      if (trendWeeks[i].completed >= settings.baselineDays) {
         streak++;
       } else {
         break;
       }
     }
 
-    let streakHtml = '';
     if (streak > 0) {
-      const msgs = ['Keep it up!', 'On fire!', 'Unstoppable!', 'Beast mode!', 'Legendary consistency!'];
-      const msgIdx = Math.min(streak - 1, msgs.length - 1);
-      streakHtml = `<span class="streak-fire">\u{1F525}</span> ${streak} week${streak !== 1 ? 's' : ''} consistent <span class="streak-msg">${msgs[msgIdx]}</span>`;
-    }
-
-    if (streakHtml) {
-      streakEl.innerHTML = streakHtml;
+      streakEl.innerHTML = `<span class="streak-fire">\u{1F525}</span> ${streak} week${streak !== 1 ? 's' : ''} at baseline <span class="streak-msg">keep momentum</span>`;
       streakEl.style.display = '';
     } else {
-      streakEl.style.display = 'none';
+      streakEl.innerHTML = `<span class="streak-msg">No active streak yet</span>`;
+      streakEl.style.display = '';
     }
+  },
+
+  _bindConsistencySettings() {
+    if (this._consistencySettingsBound) return;
+    this._consistencySettingsBound = true;
+
+    const baselineInput = document.getElementById('consistencyBaselineInput');
+    const startInput = document.getElementById('consistencyStartDateInput');
+
+    if (baselineInput) {
+      baselineInput.addEventListener('change', () => {
+        const next = Math.max(1, Math.min(7, parseInt(baselineInput.value, 10) || 4));
+        baselineInput.value = String(next);
+        Storage.set('barbellPro_consistencyBaselineDays', next);
+        this.refresh();
+      });
+    }
+
+    if (startInput) {
+      startInput.addEventListener('change', () => {
+        const value = (startInput.value || '').trim();
+        if (this._isISODate(value)) {
+          Storage.set('barbellPro_consistencyStartDate', value);
+          this.refresh();
+        }
+      });
+    }
+  },
+
+  _getConsistencySettings(workouts) {
+    const baselineRaw = Storage.get('barbellPro_consistencyBaselineDays');
+    const baselineDays = Math.max(1, Math.min(7, parseInt(baselineRaw, 10) || 4));
+
+    let startDate = Storage.get('barbellPro_consistencyStartDate');
+    if (!this._isISODate(startDate)) {
+      startDate = this._inferDefaultStartDate(workouts);
+      Storage.set('barbellPro_consistencyStartDate', startDate);
+    }
+
+    const baselineInput = document.getElementById('consistencyBaselineInput');
+    const startInput = document.getElementById('consistencyStartDateInput');
+    if (baselineInput) baselineInput.value = String(baselineDays);
+    if (startInput) startInput.value = startDate;
+
+    return { baselineDays, startDate };
+  },
+
+  _inferDefaultStartDate(workouts) {
+    const dates = [];
+    for (const week of workouts.weeks || []) {
+      for (const day of week.days || []) {
+        const iso = (day.date || '').trim();
+        if (this._isISODate(iso)) dates.push(iso);
+      }
+    }
+    if (dates.length > 0) return dates.sort()[0];
+    return this._toISODate(new Date());
+  },
+
+  _buildSessionTimeline(workouts, startDateISO) {
+    const startDate = this._parseISODate(startDateISO);
+    const timeline = [];
+
+    for (let wi = 0; wi < workouts.weeks.length; wi++) {
+      const week = workouts.weeks[wi];
+      for (let di = 0; di < (week.days || []).length; di++) {
+        const day = week.days[di];
+        const completed = !!(day.exercises && day.exercises.some(ex => ex.completed));
+        let isoDate = (day.date || '').trim();
+        if (!this._isISODate(isoDate)) {
+          const inferred = new Date(startDate);
+          inferred.setDate(inferred.getDate() + wi * 7 + di);
+          isoDate = this._toISODate(inferred);
+        }
+        timeline.push({
+          isoDate,
+          completed
+        });
+      }
+    }
+    return timeline;
+  },
+
+  _buildTrendWeeks(completedDateSet, baselineDays) {
+    const today = new Date();
+    const trend = [];
+    for (let i = 5; i >= 0; i--) {
+      const weekEnd = new Date(today);
+      weekEnd.setHours(0, 0, 0, 0);
+      weekEnd.setDate(weekEnd.getDate() - (i * 7));
+      const weekStart = new Date(weekEnd);
+      weekStart.setDate(weekEnd.getDate() - 6);
+
+      let completed = 0;
+      const cursor = new Date(weekStart);
+      while (cursor <= weekEnd) {
+        const key = this._toISODate(cursor);
+        if (completedDateSet.has(key)) completed++;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      trend.push({
+        label: `${this._toISODate(weekStart)} to ${this._toISODate(weekEnd)}`,
+        completed,
+        target: baselineDays
+      });
+    }
+    return trend;
+  },
+
+  _elapsedDaysSince(startDateISO) {
+    const start = this._parseISODate(startDateISO);
+    const today = new Date();
+    start.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.floor((today - start) / 86400000) + 1;
+    return Math.max(0, diff);
+  },
+
+  _isISODate(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value || '');
+  },
+
+  _parseISODate(iso) {
+    const [y, m, d] = (iso || '').split('-').map(Number);
+    return new Date(y || 1970, (m || 1) - 1, d || 1);
+  },
+
+  _toISODate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   },
 
   buildLiftData() {
@@ -193,9 +280,12 @@ const Analytics = {
     // Collect all unique exercise names first
     const allExercises = new Map(); // canonical -> [{date, weight, sets, reps, name}]
 
-    for (const week of workouts.weeks) {
-      for (const day of week.days) {
-        for (const ex of day.exercises) {
+    for (let wi = 0; wi < workouts.weeks.length; wi++) {
+      const week = workouts.weeks[wi];
+      for (let di = 0; di < (week.days || []).length; di++) {
+        const day = week.days[di];
+        for (let ei = 0; ei < (day.exercises || []).length; ei++) {
+          const ex = day.exercises[ei];
           const canonical = this.identifyLift(ex.name);
           if (!canonical) continue;
 
@@ -217,16 +307,23 @@ const Analytics = {
             reps,
             volume: weight * sets * reps,
             name: ex.name,
-            weekLabel: week.label
+            weekLabel: week.label,
+            weekIndex: wi,
+            dayIndex: di,
+            exerciseIndex: ei,
+            exerciseId: ex.id
           });
         }
       }
     }
 
     // Also collect individual exercise variants
-    for (const week of workouts.weeks) {
-      for (const day of week.days) {
-        for (const ex of day.exercises) {
+    for (let wi = 0; wi < workouts.weeks.length; wi++) {
+      const week = workouts.weeks[wi];
+      for (let di = 0; di < (week.days || []).length; di++) {
+        const day = week.days[di];
+        for (let ei = 0; ei < (day.exercises || []).length; ei++) {
+          const ex = day.exercises[ei];
           const weight = this.parseLoadValue(ex.load);
           if (weight === null || weight === 0) continue;
 
@@ -249,7 +346,11 @@ const Analytics = {
               reps,
               volume: weight * sets * reps,
               name: ex.name,
-              weekLabel: week.label
+              weekLabel: week.label,
+              weekIndex: wi,
+              dayIndex: di,
+              exerciseIndex: ei,
+              exerciseId: ex.id
             });
           }
         }
@@ -327,7 +428,7 @@ const Analytics = {
     }
 
     container.innerHTML = lifts.map(name =>
-      `<button class="lift-pill ${name === this.selectedLift ? 'active' : ''}" data-lift="${Utils.escapeHtml(name)}">${Utils.escapeHtml(name)}</button>`
+      `<button class="lift-pill ${name === this.selectedLift ? 'active' : ''}" data-lift="${Utils.escapeHtml(name)}" aria-label="Select ${Utils.escapeHtml(name)}">${Utils.escapeHtml(name)}</button>`
     ).join('');
 
     container.querySelectorAll('.lift-pill').forEach(pill => {
@@ -336,7 +437,6 @@ const Analytics = {
         this.renderLiftSelector();
         this.renderCharts();
         this.renderStats();
-        this.renderHistory();
       });
     });
 
@@ -371,7 +471,14 @@ const Analytics = {
       y: e.weight,
       label: e.weekLabel || e.date || ('Session ' + (i + 1)),
       sets: e.sets,
-      reps: e.reps
+      reps: e.reps,
+      ref: {
+        weekIndex: e.weekIndex,
+        dayIndex: e.dayIndex,
+        exerciseIndex: e.exerciseIndex,
+        exerciseId: e.exerciseId,
+        date: e.date || ''
+      }
     }));
     this.drawLineChart(progressionCanvas, progressionData, {
       color: '#e94560',
@@ -388,7 +495,14 @@ const Analytics = {
       y: e.volume,
       label: e.weekLabel || e.date || ('Session ' + (i + 1)),
       sets: e.sets,
-      reps: e.reps
+      reps: e.reps,
+      ref: {
+        weekIndex: e.weekIndex,
+        dayIndex: e.dayIndex,
+        exerciseIndex: e.exerciseIndex,
+        exerciseId: e.exerciseId,
+        date: e.date || ''
+      }
     }));
     if (volumeData.length > 0) {
       this.drawLineChart(volumeCanvas, volumeData, {
@@ -550,13 +664,13 @@ const Analytics = {
         return;
       }
 
-      this._showChartTooltip(canvas, points[nearestIdx], data[nearestIdx], options);
+      this._showChartTooltip(canvas, points[nearestIdx], data[nearestIdx], options, nearestIdx);
     };
 
     canvas.addEventListener('click', canvas._chartTapHandler);
   },
 
-  _showChartTooltip(canvas, point, dataPoint, options) {
+  _showChartTooltip(canvas, point, dataPoint, options, pointIndex = null) {
     // Remove existing tooltip
     this._dismissTooltip(canvas);
 
@@ -592,18 +706,30 @@ const Analytics = {
 
     container.appendChild(tooltip);
     canvas._tooltip = tooltip;
+    canvas._activeTooltipIndex = pointIndex;
+    this._lastTooltipState = {
+      canvasId: canvas.id,
+      pointIndex
+    };
+
+    if (dataPoint.ref && typeof App !== 'undefined' && App && typeof App.openTrackerFromAnalytics === 'function') {
+      tooltip.style.cursor = 'pointer';
+      tooltip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const state = this.captureViewState();
+        App.openTrackerFromAnalytics(dataPoint.ref, state);
+      });
+    }
 
     // Add indicator line on canvas
     this._drawIndicatorLine(canvas, point);
 
-    // Auto-dismiss after 4s
-    canvas._tooltipTimer = setTimeout(() => this._dismissTooltip(canvas), 4000);
+    // Auto-dismiss after 5s
+    canvas._tooltipTimer = setTimeout(() => this._dismissTooltip(canvas), 5000);
   },
 
   _drawIndicatorLine(canvas, point) {
     const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
     const { pad, chartH } = canvas._chartData;
 
     // Save and draw (no ctx.scale — context already scaled by drawLineChart)
@@ -670,147 +796,38 @@ const Analytics = {
     return Math.round(vol).toString();
   },
 
-  renderHistory() {
-    const entries = this.liftData[this.selectedLift];
-    if (!entries || entries.length === 0) return;
-
-    const container = document.getElementById('historyTable');
-    const recent = [...entries].reverse().slice(0, 10);
-
-    container.innerHTML = `
-      <div class="history-row header">
-        <span>Date</span>
-        <span>Weight</span>
-        <span>Sets x Reps</span>
-        <span style="text-align:right">Volume</span>
-      </div>
-      ${recent.map(e => `
-        <div class="history-row">
-          <span class="date">${e.weekLabel || e.date || '--'}</span>
-          <span class="weight">${Utils.formatWeight(e.weight)}</span>
-          <span class="sets-reps">${e.sets} x ${e.reps}</span>
-          <span class="volume">${Math.round(e.volume)}</span>
-        </div>
-      `).join('')}
-    `;
-  },
-
-  // --- Strength Calculators ---
-  initCalculators() {
-    // Toggle collapsible
-    const toggle = document.getElementById('calcToggle');
-    const body = document.getElementById('calcBody');
-    if (toggle && body) {
-      toggle.addEventListener('click', () => {
-        const open = body.style.display !== 'none';
-        body.style.display = open ? 'none' : '';
-        toggle.classList.toggle('open', !open);
-      });
-    }
-
-    // 1RM Calculator
-    const calcOneRm = document.getElementById('calcOneRm');
-    if (calcOneRm) {
-      calcOneRm.addEventListener('click', () => {
-        const weight = parseFloat(document.getElementById('oneRmWeight').value);
-        const reps = parseInt(document.getElementById('oneRmReps').value);
-        if (!weight || !reps || reps < 1) {
-          Toast.show('Enter weight and reps');
-          return;
-        }
-        const result = this.calculateOneRm(weight, reps);
-        const resultEl = document.getElementById('oneRmResult');
-        resultEl.style.display = '';
-        resultEl.innerHTML = `
-          <div class="calc-result-label">Estimated 1RM</div>
-          <div class="calc-result-value">${Utils.formatWeight(result.average)}kg</div>
-          <div class="calc-result-detail">
-            Epley: ${Utils.formatWeight(result.epley)}kg · Brzycki: ${Utils.formatWeight(result.brzycki)}kg
-          </div>
-        `;
-        Haptics.light();
-      });
-    }
-
-    // DOTS Gender toggle
-    const genderToggle = document.getElementById('dotsGender');
-    if (genderToggle) {
-      genderToggle.addEventListener('click', e => {
-        const btn = e.target.closest('button');
-        if (!btn) return;
-        genderToggle.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-      });
-    }
-
-    // DOTS Calculator — prefill body weight from localStorage
-    const dotsBodyWeight = document.getElementById('dotsBodyWeight');
-    if (dotsBodyWeight) {
-      const savedBw = Storage.get('barbellPro_bodyWeight');
-      const savedUnit = Storage.get('barbellPro_bodyWeightUnit') || 'kg';
-      if (savedBw) {
-        // Always show in kg for DOTS
-        dotsBodyWeight.value = savedUnit === 'lb' ? Utils.lbToKg(savedBw) : savedBw;
-      }
-
-      // Auto-save body weight when user types it (replaces old Settings modal save)
-      dotsBodyWeight.addEventListener('change', () => {
-        const val = parseFloat(dotsBodyWeight.value);
-        if (!isNaN(val) && val > 0) {
-          Storage.set('barbellPro_bodyWeight', val);
-          Storage.set('barbellPro_bodyWeightUnit', 'kg');
-        }
-      });
-    }
-
-    const calcDots = document.getElementById('calcDots');
-    if (calcDots) {
-      calcDots.addEventListener('click', () => {
-        const liftWeight = parseFloat(document.getElementById('dotsLiftWeight').value);
-        const bodyWeight = parseFloat(document.getElementById('dotsBodyWeight').value);
-        const gender = document.querySelector('#dotsGender button.active').dataset.gender;
-        if (!liftWeight || !bodyWeight) {
-          Toast.show('Enter lift weight and body weight');
-          return;
-        }
-        const dots = this.calculateDOTS(liftWeight, bodyWeight, gender);
-        const resultEl = document.getElementById('dotsResult');
-        resultEl.style.display = '';
-        resultEl.innerHTML = `
-          <div class="calc-result-label">DOTS Score</div>
-          <div class="calc-result-value">${dots.toFixed(1)}</div>
-          <div class="calc-result-detail">
-            ${liftWeight}kg lift at ${bodyWeight}kg body weight (${gender})
-          </div>
-        `;
-        Haptics.light();
-      });
-    }
-  },
-
-  calculateOneRm(weight, reps) {
-    if (reps === 1) return { epley: weight, brzycki: weight, average: weight };
-    const epley = weight * (1 + reps / 30);
-    const brzycki = weight * 36 / (37 - reps);
-    const average = (epley + brzycki) / 2;
+  captureViewState() {
     return {
-      epley: Math.round(epley * 10) / 10,
-      brzycki: Math.round(brzycki * 10) / 10,
-      average: Math.round(average * 10) / 10
+      selectedLift: this.selectedLift,
+      scrollY: window.scrollY,
+      tooltip: this._lastTooltipState ? { ...this._lastTooltipState } : null
     };
   },
 
-  calculateDOTS(liftWeight, bodyWeight, gender) {
-    // DOTS coefficients
-    const maleCoeffs = [-307.75076, 24.0900756, -0.1918759221, 0.0007391293, -0.000001093];
-    const femaleCoeffs = [-57.96288, 13.6175032, -0.1126655495, 0.0005158568, -0.0000010706];
-    const coeffs = gender === 'female' ? femaleCoeffs : maleCoeffs;
+  restoreViewState(state) {
+    if (!state) return;
 
-    const bw = bodyWeight;
-    const denominator = coeffs[0] + coeffs[1] * bw + coeffs[2] * Math.pow(bw, 2)
-      + coeffs[3] * Math.pow(bw, 3) + coeffs[4] * Math.pow(bw, 4);
-    if (denominator === 0 || !isFinite(denominator)) return 0;
-    const dots = (500 / denominator) * liftWeight;
-    return isFinite(dots) ? Math.max(0, dots) : 0;
+    if (state.selectedLift && this.liftData[state.selectedLift]) {
+      this.selectedLift = state.selectedLift;
+    }
+
+    this.renderLiftSelector();
+    this.renderCharts();
+    this.renderStats();
+
+    requestAnimationFrame(() => {
+      if (typeof state.scrollY === 'number') {
+        window.scrollTo({ top: state.scrollY, behavior: 'smooth' });
+      }
+
+      if (state.tooltip && state.tooltip.canvasId) {
+        const canvas = document.getElementById(state.tooltip.canvasId);
+        const chart = canvas && canvas._chartData;
+        const pointIndex = Number.isInteger(state.tooltip.pointIndex) ? state.tooltip.pointIndex : -1;
+        if (chart && pointIndex >= 0 && chart.points[pointIndex] && chart.data[pointIndex]) {
+          this._showChartTooltip(canvas, chart.points[pointIndex], chart.data[pointIndex], chart.options, pointIndex);
+        }
+      }
+    });
   }
 };

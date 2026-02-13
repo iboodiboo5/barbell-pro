@@ -1,5 +1,5 @@
 /* ============================================
-   KK BARBELL - App Shell & Utilities
+   OK BARBELL - App Shell & Utilities
    ============================================ */
 
 // --- Storage Utility ---
@@ -162,7 +162,9 @@ const Sound = {
 
   // --- Sound Presets ---
   tabClick() {
-    this._play(1200, 0.05, 'sine', 0.06);
+    // Softer, lower-frequency "glass tick" to avoid sharp tab-switch fatigue.
+    this._play(620, 0.05, 'triangle', 0.022, 560);
+    setTimeout(() => this._play(760, 0.035, 'sine', 0.012, 700), 14);
   },
 
   exerciseComplete() {
@@ -207,6 +209,10 @@ const RestTimer = {
   _dismissTimer: null,
   _pillCorner: 'bottom-right',
   _isDragging: false,
+  _selectedMinutes: 2,
+  _selectedSeconds: 0,
+  _wheelBound: false,
+  _wheelScrollDebounce: null,
 
   PRESETS: [
     { label: '2:00', seconds: 120 },  // "Last" — updated from localStorage
@@ -241,14 +247,6 @@ const RestTimer = {
     // Bind pill tap → expand
     document.getElementById('restPill').addEventListener('click', () => this.expand());
 
-    // Bind digits tap → editable custom time (only when not running)
-    document.getElementById('timerDigits').addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (!this._isRunning && this._isExpanded) {
-        this._makeDigitsEditable();
-      }
-    });
-
     // Bind overlay dismiss (tap outside ring)
     document.getElementById('timerOverlay').addEventListener('click', (e) => {
       if (e.target === e.currentTarget) this.collapse();
@@ -260,8 +258,20 @@ const RestTimer = {
       this.stop();
     });
 
+    // Bind setup start button
+    document.getElementById('timerStartBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const seconds = this._getWheelSeconds();
+      if (seconds >= 5) {
+        this.start(seconds);
+      } else {
+        Toast.show('Set at least 0:05');
+      }
+    });
+
     // Swipe-down to collapse
     this._setupSwipeDown();
+    this._initWheelPicker();
 
     // Check notification permission
     if ('Notification' in window && Notification.permission === 'granted') {
@@ -295,6 +305,7 @@ const RestTimer = {
     this._duration = seconds;
     this._endTime = Date.now() + (seconds * 1000);
     this._isRunning = true;
+    this._setWheelFromSeconds(seconds);
 
     // Show pill at saved corner
     const pill = document.getElementById('restPill');
@@ -335,6 +346,11 @@ const RestTimer = {
 
     Haptics.light();
     Sound.tabClick();
+
+    if (this._isExpanded) {
+      this._updateOverlayState();
+      this._renderPresets();
+    }
   },
 
   stop() {
@@ -357,7 +373,9 @@ const RestTimer = {
     document.getElementById('timerBtnDot').classList.remove('active');
 
     // Close overlay if expanded
-    if (this._isExpanded) this.collapse();
+    if (this._isExpanded) {
+      this._updateOverlayState();
+    }
 
     Haptics.light();
     Sound.delete();
@@ -446,6 +464,7 @@ const RestTimer = {
 
       document.getElementById('timerBtnDot').classList.remove('active');
     }, 3000);
+
   },
 
   expand() {
@@ -457,28 +476,7 @@ const RestTimer = {
 
     // Render preset buttons
     this._renderPresets();
-
-    // Sync ring state
-    const ring = document.getElementById('timerRingProgress');
-    ring.classList.remove('complete');
-
-    const digitsEl = document.getElementById('timerDigits');
-    if (this._isRunning) {
-      const remaining = Math.max(0, Math.ceil((this._endTime - Date.now()) / 1000));
-      this._updateRing(remaining, this._duration);
-      digitsEl.textContent = this.formatTime(remaining);
-      digitsEl.classList.remove('editable');
-      // Show stop button
-      document.getElementById('timerStopBtn').style.display = '';
-    } else {
-      // Show last-used duration as default (full ring)
-      const defaultTime = this.PRESETS[0].seconds;
-      digitsEl.textContent = this.formatTime(defaultTime);
-      digitsEl.classList.add('editable');
-      this._updateRing(defaultTime, defaultTime);
-      // Hide stop button when no timer running
-      document.getElementById('timerStopBtn').style.display = 'none';
-    }
+    this._updateOverlayState();
 
     Haptics.light();
   },
@@ -518,7 +516,7 @@ const RestTimer = {
     container.innerHTML = this.PRESETS.map((p, i) => {
       const isActive = this._isRunning && this._duration === p.seconds;
       const label = i === 0 ? 'Last: ' + p.label : p.label;
-      return `<button class="timer-preset-btn ${isActive ? 'active' : ''}" data-seconds="${p.seconds}" data-index="${i}">${label}</button>`;
+      return `<button class="timer-preset-btn ${isActive ? 'active' : ''}" data-seconds="${p.seconds}" data-index="${i}" aria-label="Start rest timer for ${label}">${label}</button>`;
     }).join('');
 
     // Set up delegation once (not on every render)
@@ -530,13 +528,133 @@ const RestTimer = {
         const seconds = parseInt(btn.dataset.seconds);
         if (seconds > 0) {
           this.start(seconds);
+          this._setWheelFromSeconds(seconds);
           // Re-render presets to update active state
           this._renderPresets();
-          // Show stop button now that timer is running
-          document.getElementById('timerStopBtn').style.display = '';
         }
       });
     }
+  },
+
+  _updateOverlayState() {
+    const setupPanel = document.getElementById('timerSetupPanel');
+    const runningPanel = document.getElementById('timerRunningPanel');
+    const ring = document.getElementById('timerRingProgress');
+    const digitsEl = document.getElementById('timerDigits');
+
+    ring.classList.remove('complete');
+
+    if (this._isRunning) {
+      setupPanel.style.display = 'none';
+      runningPanel.style.display = '';
+      const remaining = Math.max(0, Math.ceil((this._endTime - Date.now()) / 1000));
+      this._updateRing(remaining, this._duration);
+      digitsEl.textContent = this.formatTime(remaining);
+      document.getElementById('timerStopBtn').style.display = '';
+    } else {
+      runningPanel.style.display = 'none';
+      setupPanel.style.display = '';
+      const defaultTime = this.PRESETS[0].seconds;
+      this._setWheelFromSeconds(defaultTime);
+      this._updateRing(defaultTime, defaultTime);
+      digitsEl.textContent = this.formatTime(defaultTime);
+      document.getElementById('timerStopBtn').style.display = 'none';
+    }
+  },
+
+  _initWheelPicker() {
+    if (this._wheelBound) return;
+    this._wheelBound = true;
+
+    const minutesWheel = document.getElementById('timerMinutesWheel');
+    const secondsWheel = document.getElementById('timerSecondsWheel');
+    if (!minutesWheel || !secondsWheel) return;
+
+    const buildItems = (max, step = 1) => {
+      const items = [];
+      for (let i = 0; i <= max; i += step) {
+        const label = String(i).padStart(2, '0');
+        items.push(`<button class="timer-wheel-item" type="button" data-value="${i}" aria-label="${label}">${label}</button>`);
+      }
+      return items.join('');
+    };
+
+    minutesWheel.innerHTML = buildItems(59, 1);
+    secondsWheel.innerHTML = buildItems(55, 5);
+
+    const wheelTap = (wheel, isMinutes, e) => {
+      const item = e.target.closest('.timer-wheel-item');
+      if (!item) return;
+      const value = parseInt(item.dataset.value, 10);
+      if (isMinutes) this._selectedMinutes = value;
+      else this._selectedSeconds = value;
+      item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      this._syncWheelActiveItem();
+    };
+
+    minutesWheel.addEventListener('click', (e) => wheelTap(minutesWheel, true, e));
+    secondsWheel.addEventListener('click', (e) => wheelTap(secondsWheel, false, e));
+
+    const bindWheelScroll = (wheel, isMinutes) => {
+      wheel.addEventListener('scroll', () => {
+        clearTimeout(this._wheelScrollDebounce);
+        this._wheelScrollDebounce = setTimeout(() => {
+          const rect = wheel.getBoundingClientRect();
+          const centerY = rect.top + rect.height / 2;
+          let nearest = null;
+          let nearestDistance = Infinity;
+
+          wheel.querySelectorAll('.timer-wheel-item').forEach((item) => {
+            const iRect = item.getBoundingClientRect();
+            const itemCenter = iRect.top + iRect.height / 2;
+            const dist = Math.abs(itemCenter - centerY);
+            if (dist < nearestDistance) {
+              nearestDistance = dist;
+              nearest = item;
+            }
+          });
+
+          if (nearest) {
+            const value = parseInt(nearest.dataset.value, 10);
+            if (isMinutes) this._selectedMinutes = value;
+            else this._selectedSeconds = value;
+            nearest.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            this._syncWheelActiveItem();
+          }
+        }, 80);
+      }, { passive: true });
+    };
+
+    bindWheelScroll(minutesWheel, true);
+    bindWheelScroll(secondsWheel, false);
+
+    this._setWheelFromSeconds(this.PRESETS[0].seconds || 120);
+  },
+
+  _setWheelFromSeconds(totalSeconds) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    this._selectedMinutes = Math.max(0, Math.min(59, minutes));
+    this._selectedSeconds = Math.max(0, Math.min(55, Math.round(seconds / 5) * 5));
+
+    const minutesEl = document.querySelector(`#timerMinutesWheel .timer-wheel-item[data-value="${this._selectedMinutes}"]`);
+    const secondsEl = document.querySelector(`#timerSecondsWheel .timer-wheel-item[data-value="${this._selectedSeconds}"]`);
+
+    if (minutesEl) minutesEl.scrollIntoView({ block: 'center' });
+    if (secondsEl) secondsEl.scrollIntoView({ block: 'center' });
+    this._syncWheelActiveItem();
+  },
+
+  _getWheelSeconds() {
+    return (this._selectedMinutes * 60) + this._selectedSeconds;
+  },
+
+  _syncWheelActiveItem() {
+    document.querySelectorAll('.timer-wheel-item').forEach(item => item.classList.remove('active'));
+    const minSel = document.querySelector(`#timerMinutesWheel .timer-wheel-item[data-value="${this._selectedMinutes}"]`);
+    const secSel = document.querySelector(`#timerSecondsWheel .timer-wheel-item[data-value="${this._selectedSeconds}"]`);
+    if (minSel) minSel.classList.add('active');
+    if (secSel) secSel.classList.add('active');
   },
 
   _setupPillDrag() {
@@ -620,7 +738,8 @@ const RestTimer = {
     const cs = getComputedStyle(document.documentElement);
     const sat = parseInt(cs.getPropertyValue('--sat')) || 0;
     const sab = parseInt(cs.getPropertyValue('--sab')) || 0;
-    const tabBarH = 70 + sab; // matches .tab-bar height
+    const tabBar = document.querySelector('.tab-bar');
+    const tabBarH = tabBar ? Math.round(tabBar.getBoundingClientRect().height) : (58 + sab);
 
     // Clear transform (no centering transform needed)
     pill.style.transform = '';
@@ -739,8 +858,8 @@ const RestTimer = {
     let tracking = false;
 
     overlay.addEventListener('touchstart', (e) => {
-      // Only track if touching the overlay background or ring (not buttons or inputs)
-      if ((e.target === overlay || e.target.closest('.timer-ring-container')) && !e.target.closest('input')) {
+      // Only track if touching background/ring/setup shell (not direct controls).
+      if ((e.target === overlay || e.target.closest('.timer-ring-container') || e.target.closest('.timer-setup-panel')) && !e.target.closest('input, button, a')) {
         startY = e.touches[0].clientY;
         tracking = true;
         deltaY = 0;
@@ -836,6 +955,8 @@ const Notes = {
 // --- Tab Navigation ---
 const App = {
   currentTab: 'tracker',
+  _analyticsReturnState: null,
+  _analyticsReturnVisible: false,
 
   init() {
     this.registerServiceWorker();
@@ -856,6 +977,11 @@ const App = {
     Notes.init();
     Analytics.init();
     RestTimer.init();
+
+    const backBtn = document.getElementById('trackerBackToAnalytics');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => this.returnToAnalytics());
+    }
   },
 
   registerServiceWorker() {
@@ -888,7 +1014,7 @@ const App = {
     banner.className = 'update-banner';
     banner.innerHTML = `
       <span>New version available</span>
-      <button class="update-btn">Update</button>
+      <button class="update-btn" aria-label="Update app to latest version">Update</button>
     `;
     document.body.appendChild(banner);
 
@@ -915,9 +1041,12 @@ const App = {
     });
   },
 
-  switchTab(tabName) {
-    Haptics.light();
-    Sound.tabClick();
+  switchTab(tabName, options = {}) {
+    const silent = options && options.silent;
+    if (!silent) {
+      Haptics.light();
+      Sound.tabClick();
+    }
 
     // Update buttons
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -939,10 +1068,48 @@ const App = {
 
     this.currentTab = tabName;
 
+    if (tabName !== 'tracker' && !this._analyticsReturnVisible) {
+      this._setAnalyticsReturnButton(false);
+    }
+
     // Notify analytics to refresh charts if switching to it
     if (tabName === 'analytics') {
       Analytics.refresh();
     }
+  },
+
+  openTrackerFromAnalytics(ref, analyticsState) {
+    this._analyticsReturnState = analyticsState || null;
+    this._analyticsReturnVisible = true;
+    this._setAnalyticsReturnButton(true);
+    this.switchTab('tracker');
+    if (Tracker && typeof Tracker.openFromAnalyticsRef === 'function') {
+      Tracker.openFromAnalyticsRef(ref);
+    }
+  },
+
+  returnToAnalytics() {
+    if (!this._analyticsReturnVisible) return;
+    this.switchTab('analytics');
+
+    const state = this._analyticsReturnState;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (Analytics && typeof Analytics.restoreViewState === 'function' && state) {
+          Analytics.restoreViewState(state);
+        }
+      });
+    });
+
+    this._analyticsReturnState = null;
+    this._analyticsReturnVisible = false;
+    this._setAnalyticsReturnButton(false);
+  },
+
+  _setAnalyticsReturnButton(visible) {
+    const backBtn = document.getElementById('trackerBackToAnalytics');
+    if (!backBtn) return;
+    backBtn.style.display = visible ? '' : 'none';
   }
 };
 
