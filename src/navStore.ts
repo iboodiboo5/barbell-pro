@@ -16,6 +16,9 @@ interface NavState {
   plateCalcKg: number | null
   openPlateCalc: (kg: number) => void
   closePlateCalc: () => void
+  settingsOpen: boolean
+  openSettings: () => void
+  closeSettings: () => void
 }
 
 export const useNavStore = create<NavState>((set) => ({
@@ -31,4 +34,7 @@ export const useNavStore = create<NavState>((set) => ({
   plateCalcKg: null,
   openPlateCalc: (kg) => set({ plateCalcKg: kg }),
   closePlateCalc: () => set({ plateCalcKg: null }),
+  settingsOpen: false,
+  openSettings: () => set({ settingsOpen: true }),
+  closeSettings: () => set({ settingsOpen: false }),
 }))

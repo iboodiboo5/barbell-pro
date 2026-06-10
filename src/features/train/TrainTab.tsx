@@ -138,6 +138,7 @@ export function TrainTab() {
   const weeks = useLiveQuery(() => db.weeks.orderBy('order').toArray(), [])
   const settings = useLiveQuery(() => repo.getSettings(), [])
   const openPlateCalc = useNavStore((s) => s.openPlateCalc)
+  const openSettings = useNavStore((s) => s.openSettings)
 
   const [selectedWeekId, setSelectedWeekId] = useState<string | null>(null)
   // Default to the most recent week; fall back gracefully if the selected one
@@ -229,9 +230,8 @@ export function TrainTab() {
             <path d="M2 12h1.5M20.5 12h1.5" />
           </svg>
         </PressScale>
-        {/* TODO(Task 10): open the Settings sheet from here. */}
         <PressScale
-          onClick={() => {}}
+          onClick={openSettings}
           aria-label="Settings"
           style={{
             display: 'flex',

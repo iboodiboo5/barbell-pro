@@ -4,6 +4,8 @@ import { useNavStore } from './navStore'
 import { TabBar } from './ui/TabBar'
 import { TrainTab } from './features/train/TrainTab'
 import { PlateCalcSheet } from './features/plate-calc/PlateCalcSheet'
+import { SettingsSheet } from './features/settings/SettingsSheet'
+import { ToastHost } from './ui/Toast'
 
 // Dev-only kitchen sink (Task 7) — removed in Task 15. Lazy so it never
 // lands in the production bundle.
@@ -90,7 +92,9 @@ export default function App() {
         </button>
       )}
       <PlateCalcSheet />
+      <SettingsSheet />
       <TabBar />
+      <ToastHost />
     </>
   )
 }
