@@ -1,6 +1,13 @@
+import { lazy, Suspense, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useNavStore } from './navStore'
 import { TabBar } from './ui/TabBar'
+
+// Dev-only kitchen sink (Task 7) — removed in Task 15. Lazy so it never
+// lands in the production bundle.
+const DevGallery = import.meta.env.DEV
+  ? lazy(() => import('./ui/DevGallery').then((m) => ({ default: m.DevGallery })))
+  : null
 
 const tabVariants = {
   initial: { opacity: 0, y: 8 },
@@ -38,9 +45,48 @@ function TabContent() {
 }
 
 export default function App() {
+  const [devOpen, setDevOpen] = useState(false)
+
   return (
     <>
-      <TabContent />
+      {devOpen && DevGallery ? (
+        <div
+          style={{
+            minHeight: '100dvh',
+            paddingBottom: 'calc(64px + var(--safe-bottom))',
+            paddingTop: 'var(--safe-top)',
+          }}
+        >
+          <Suspense fallback={null}>
+            <DevGallery />
+          </Suspense>
+        </div>
+      ) : (
+        <TabContent />
+      )}
+      {import.meta.env.DEV && (
+        <button
+          onClick={() => setDevOpen((v) => !v)}
+          aria-label="Toggle dev gallery"
+          style={{
+            position: 'fixed',
+            top: 'calc(12px + var(--safe-top))',
+            right: 12,
+            zIndex: 400,
+            padding: '4px 10px',
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '0.06em',
+            background: devOpen ? 'var(--accent)' : 'var(--surface-2)',
+            color: devOpen ? 'var(--text)' : 'var(--text-dim)',
+            border: '1px solid var(--border-strong)',
+            cursor: 'pointer',
+          }}
+        >
+          DEV
+        </button>
+      )}
       <TabBar />
     </>
   )
