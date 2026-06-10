@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+:root {
+  /* Midnight Pro palette */
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --surface-2: #16161e;
+  --border: #1d1d28;
+  --border-strong: #23232e;
+  --text: #f2f2f7;
+  --text-dim: #8e8e98;
+  --text-faint: #55555f;
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, .15);
+  --success: #30d158;
+  --danger: #ff453a;
+  --gold: #ffd60a;
+  --radius-card: 20px;
+  --radius-sheet: 28px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+html, body { background: var(--bg); color: var(--text); overscroll-behavior: none; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif; -webkit-tap-highlight-color: transparent; user-select: none; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
