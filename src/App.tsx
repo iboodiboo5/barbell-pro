@@ -9,6 +9,7 @@ import { LiveWorkout } from './features/live/LiveWorkout'
 import { useLiveStore } from './features/live/liveStore'
 import { LiftsTab } from './features/lifts/LiftsTab'
 import { LiftDetail } from './features/lifts/LiftDetail'
+import { StatsTab } from './features/stats/StatsTab'
 import { ToastHost } from './ui/Toast'
 
 // Dev-only kitchen sink (Task 7) — removed in Task 15. Lazy so it never
@@ -45,7 +46,7 @@ function TabContent() {
       >
         {tab === 'train' && <TrainTab />}
         {tab === 'lifts' && <LiftsTab />}
-        {tab === 'stats' && <div />}
+        {tab === 'stats' && <StatsTab />}
         {tab === 'notes' && <div />}
       </motion.div>
     </AnimatePresence>
