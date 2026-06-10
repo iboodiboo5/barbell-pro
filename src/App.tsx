@@ -7,6 +7,8 @@ import { PlateCalcSheet } from './features/plate-calc/PlateCalcSheet'
 import { SettingsSheet } from './features/settings/SettingsSheet'
 import { LiveWorkout } from './features/live/LiveWorkout'
 import { useLiveStore } from './features/live/liveStore'
+import { LiftsTab } from './features/lifts/LiftsTab'
+import { LiftDetail } from './features/lifts/LiftDetail'
 import { ToastHost } from './ui/Toast'
 
 // Dev-only kitchen sink (Task 7) — removed in Task 15. Lazy so it never
@@ -42,7 +44,7 @@ function TabContent() {
         }}
       >
         {tab === 'train' && <TrainTab />}
-        {tab === 'lifts' && <div />}
+        {tab === 'lifts' && <LiftsTab />}
         {tab === 'stats' && <div />}
         {tab === 'notes' && <div />}
       </motion.div>
@@ -53,6 +55,7 @@ function TabContent() {
 export default function App() {
   const [devOpen, setDevOpen] = useState(false)
   const liveActive = useNavStore((s) => s.liveActive)
+  const liftDetailId = useNavStore((s) => s.liftDetailId)
 
   // Resume an interrupted live session on launch (app killed mid-workout).
   useEffect(() => {
@@ -105,6 +108,7 @@ export default function App() {
         </button>
       )}
       <AnimatePresence>{liveActive && <LiveWorkout />}</AnimatePresence>
+      <AnimatePresence>{liftDetailId && <LiftDetail liftId={liftDetailId} />}</AnimatePresence>
       <PlateCalcSheet />
       <SettingsSheet />
       <TabBar />
