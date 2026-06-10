@@ -1,6 +1,8 @@
 import { db, DEFAULT_SETTINGS } from './db'
 import type { Week, Day, Exercise, Note, BodyWeightEntry, Settings } from './db'
 
+type ExercisePatch = Partial<Pick<Exercise, 'liftId' | 'plannedLoad' | 'plannedSets' | 'plannedReps' | 'remarks'>>
+
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 function uuid(): string {
@@ -18,18 +20,20 @@ export const repo = {
   // ── Weeks ──────────────────────────────────────────────────────────────
 
   async addWeek(label?: string): Promise<Week> {
-    const count = await db.weeks.count()
-    const all = await db.weeks.toArray()
-    const maxOrder = all.reduce((m, w) => Math.max(m, w.order), -1)
-    const resolvedLabel = label ?? `Week ${count + 1}`
-    const week: Week = {
-      id: uuid(),
-      label: resolvedLabel,
-      order: maxOrder + 1,
-      updatedAt: now(),
-    }
-    await db.weeks.add(week)
-    return week
+    return db.transaction('rw', db.weeks, async () => {
+      const count = await db.weeks.count()
+      const all = await db.weeks.toArray()
+      const maxOrder = all.reduce((m, w) => Math.max(m, w.order), -1)
+      const resolvedLabel = label ?? `Week ${count + 1}`
+      const week: Week = {
+        id: uuid(),
+        label: resolvedLabel,
+        order: maxOrder + 1,
+        updatedAt: now(),
+      }
+      await db.weeks.add(week)
+      return week
+    })
   },
 
   async deleteWeek(id: string): Promise<void> {
@@ -99,17 +103,19 @@ export const repo = {
   // ── Days ───────────────────────────────────────────────────────────────
 
   async addDay(weekId: string, name: string): Promise<Day> {
-    const existing = await db.days.where('weekId').equals(weekId).toArray()
-    const maxOrder = existing.reduce((m, d) => Math.max(m, d.order), -1)
-    const day: Day = {
-      id: uuid(),
-      weekId,
-      name,
-      order: maxOrder + 1,
-      updatedAt: now(),
-    }
-    await db.days.add(day)
-    return day
+    return db.transaction('rw', db.days, async () => {
+      const existing = await db.days.where('weekId').equals(weekId).toArray()
+      const maxOrder = existing.reduce((m, d) => Math.max(m, d.order), -1)
+      const day: Day = {
+        id: uuid(),
+        weekId,
+        name,
+        order: maxOrder + 1,
+        updatedAt: now(),
+      }
+      await db.days.add(day)
+      return day
+    })
   },
 
   async deleteDay(id: string): Promise<void> {
@@ -128,24 +134,26 @@ export const repo = {
     dayId: string,
     partial: { liftId: string; plannedLoad: number; plannedSets: number; plannedReps: number; remarks: string[] }
   ): Promise<Exercise> {
-    const existing = await db.exercises.where('dayId').equals(dayId).toArray()
-    const maxOrder = existing.reduce((m, e) => Math.max(m, e.order), -1)
-    const exercise: Exercise = {
-      id: uuid(),
-      dayId,
-      liftId: partial.liftId,
-      plannedLoad: partial.plannedLoad,
-      plannedSets: partial.plannedSets,
-      plannedReps: partial.plannedReps,
-      remarks: partial.remarks,
-      order: maxOrder + 1,
-      updatedAt: now(),
-    }
-    await db.exercises.add(exercise)
-    return exercise
+    return db.transaction('rw', db.exercises, async () => {
+      const existing = await db.exercises.where('dayId').equals(dayId).toArray()
+      const maxOrder = existing.reduce((m, e) => Math.max(m, e.order), -1)
+      const exercise: Exercise = {
+        id: uuid(),
+        dayId,
+        liftId: partial.liftId,
+        plannedLoad: partial.plannedLoad,
+        plannedSets: partial.plannedSets,
+        plannedReps: partial.plannedReps,
+        remarks: partial.remarks,
+        order: maxOrder + 1,
+        updatedAt: now(),
+      }
+      await db.exercises.add(exercise)
+      return exercise
+    })
   },
 
-  async updateExercise(id: string, patch: Partial<Omit<Exercise, 'id'>>): Promise<void> {
+  async updateExercise(id: string, patch: ExercisePatch): Promise<void> {
     await db.exercises.update(id, { ...patch, updatedAt: now() })
   },
 
@@ -159,10 +167,10 @@ export const repo = {
   async reorderExercises(dayId: string, orderedIds: string[]): Promise<void> {
     await db.transaction('rw', db.exercises, async () => {
       for (let i = 0; i < orderedIds.length; i++) {
-        await db.exercises.update(orderedIds[i], { order: i, updatedAt: now() })
+        await db.exercises
+          .where({ id: orderedIds[i], dayId })
+          .modify({ order: i, updatedAt: now() })
       }
-      // suppress unused param warning — dayId is the semantic scope
-      void dayId
     })
   },
 
@@ -170,8 +178,11 @@ export const repo = {
 
   async getSettings(): Promise<Settings> {
     const stored = await db.settings.get('app')
-    if (!stored) return { ...DEFAULT_SETTINGS }
-    return { ...DEFAULT_SETTINGS, ...stored }
+    const merged: Settings = stored
+      ? { ...DEFAULT_SETTINGS, ...stored }
+      : { ...DEFAULT_SETTINGS }
+    merged.platesKg = [...merged.platesKg]
+    return merged
   },
 
   async updateSettings(patch: Partial<Omit<Settings, 'id'>>): Promise<void> {
