@@ -9,6 +9,7 @@ interface ButtonProps {
   variant?: ButtonVariant
   fullWidth?: boolean
   disabled?: boolean
+  className?: string
   style?: CSSProperties
   'aria-label'?: string
 }
@@ -37,6 +38,7 @@ export function Button({
   variant = 'primary',
   fullWidth,
   disabled,
+  className,
   style,
   'aria-label': ariaLabel,
 }: ButtonProps) {
@@ -44,6 +46,7 @@ export function Button({
     <PressScale
       onClick={onClick}
       disabled={disabled}
+      className={className}
       aria-label={ariaLabel}
       style={{
         display: fullWidth ? 'flex' : 'inline-flex',

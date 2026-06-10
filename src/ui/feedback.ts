@@ -13,7 +13,18 @@ export function getFeedbackSettings(): FeedbackSettings {
   return cache
 }
 
-/** Re-reads { sound, haptics } from settings. Call after the settings sheet mutates them. */
+/**
+ * The ONLY way to change the sound/haptics flags. Updates the synchronous
+ * module cache immediately AND persists to the settings store, so the cache
+ * and db can never drift apart. Do not call repo.updateSettings directly
+ * for these two flags.
+ */
+export function setFeedbackSettings(patch: { sound?: boolean; haptics?: boolean }): void {
+  cache = { ...cache, ...patch }
+  void repo.updateSettings(patch)
+}
+
+/** Re-reads { sound, haptics } from settings. For full reloads (e.g. backup import). */
 export async function refreshFeedbackSettings(): Promise<FeedbackSettings> {
   try {
     const s = await repo.getSettings()

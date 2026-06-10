@@ -1,5 +1,5 @@
 import { motion } from 'motion/react'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 
 interface ConfettiProps {
   onDone?: () => void
@@ -46,11 +46,18 @@ function makeParticles(): Particle[] {
 export function Confetti({ onDone }: ConfettiProps) {
   const particles = useMemo(makeParticles, [])
 
+  // Hold onDone in a ref so parent re-renders (new callback identity) can't
+  // reset the timer; armed exactly once on mount.
+  const onDoneRef = useRef(onDone)
   useEffect(() => {
-    if (!onDone) return
-    const t = setTimeout(onDone, TOTAL_MS)
+    onDoneRef.current = onDone
+  })
+
+  useEffect(() => {
+    const t = setTimeout(() => onDoneRef.current?.(), TOTAL_MS)
     return () => clearTimeout(t)
-  }, [onDone])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div

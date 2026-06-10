@@ -7,7 +7,8 @@ let ctx: AudioContext | null = null
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined' || typeof AudioContext === 'undefined') return null
   if (!ctx) ctx = new AudioContext()
-  if (ctx.state === 'suspended') void ctx.resume()
+  // 'suspended' OR iOS Safari's non-standard 'interrupted' state both need a resume.
+  if (ctx.state !== 'running') ctx.resume().catch(() => {})
   return ctx
 }
 
