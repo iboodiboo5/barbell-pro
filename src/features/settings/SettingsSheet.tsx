@@ -4,7 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavStore } from '../../navStore'
 import { repo } from '../../data/repo'
 import { DEFAULT_SETTINGS } from '../../data/db'
-import { detectFormat, exportBackup, importBackup, migrateLegacy } from '../../data/backup'
+import { detectFormat, exportBackup, importBackup, migrateLegacy, previewCounts, type ImportPreview } from '../../data/backup'
 import { refreshFeedbackSettings, setFeedbackSettings } from '../../ui/feedback'
 import { Sheet } from '../../ui/Sheet'
 import { Button } from '../../ui/Button'
@@ -307,7 +307,13 @@ const dateInputStyle: CSSProperties = {
 interface PendingImport {
   json: string
   format: 'v2' | 'legacy'
+  counts: ImportPreview
 }
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+const countsLine = (c: ImportPreview) =>
+  `${plural(c.weeks, 'week')} · ${plural(c.setLogs, 'set')} · ${plural(c.lifts, 'lift')}`
 
 // ─── SettingsSheet ───────────────────────────────────────────────────────────
 
@@ -397,7 +403,7 @@ export function SettingsSheet() {
         toast('Not a valid backup file')
         return
       }
-      setPendingImport({ json, format })
+      setPendingImport({ json, format, counts: previewCounts(json, format) })
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Could not read file')
     }
@@ -656,9 +662,11 @@ export function SettingsSheet() {
         open={pendingImport !== null}
         title={pendingImport?.format === 'legacy' ? 'Import old data?' : 'Restore backup?'}
         message={
-          pendingImport?.format === 'legacy'
-            ? "Adds the old app's data to your current data. Nothing is deleted."
-            : 'Replaces ALL current data — weeks, sets, lifts, notes and settings. This cannot be undone.'
+          pendingImport === null
+            ? ''
+            : pendingImport.format === 'legacy'
+              ? `Adds ${countsLine(pendingImport.counts)} from the old app to your current data. Nothing is deleted.`
+              : `Replaces ALL current data with ${countsLine(pendingImport.counts)}. Notes and settings are replaced too. This cannot be undone.`
         }
         confirmLabel={pendingImport?.format === 'legacy' ? 'Import' : 'Replace everything'}
         onConfirm={() => void runImport()}

@@ -81,17 +81,14 @@ export function detectFormat(json: string): 'v2' | 'legacy' | 'invalid' {
 
 // ─── importBackup ────────────────────────────────────────────────────────────
 
-export async function importBackup(
-  json: string
-): Promise<{ weeks: number; days: number; exercises: number; setLogs: number }> {
-  // Validate BEFORE any write
+/** Parse + validate a v2 backup payload. Throws on anything malformed; never writes. */
+function parseV2(json: string): BackupV2 {
   if (detectFormat(json) !== 'v2') {
-    throw new Error('importBackup: not a valid barbell-pro v2 backup')
+    throw new Error('Not a valid barbell-pro v2 backup')
   }
 
   const backup = JSON.parse(json) as BackupV2
 
-  // Validate that data arrays exist
   const d = backup.data
   if (
     !d ||
@@ -104,16 +101,48 @@ export async function importBackup(
     !Array.isArray(d.bodyWeights) ||
     !Array.isArray(d.settings)
   ) {
-    throw new Error('importBackup: backup data is missing required arrays')
+    throw new Error('Backup data is missing required arrays')
   }
+  return backup
+}
+
+export interface ImportPreview { weeks: number; setLogs: number; lifts: number }
+
+/** Counts shown in the import confirm step. Never writes. Throws on invalid input. */
+export function previewCounts(json: string, format: 'v2' | 'legacy'): ImportPreview {
+  if (format === 'v2') {
+    const { data } = parseV2(json)
+    return { weeks: data.weeks.length, setLogs: data.setLogs.length, lifts: data.lifts.length }
+  }
+  const parsed = JSON.parse(json) as LegacyShape
+  const liftNames = new Set<string>()
+  let setLogs = 0
+  for (const week of parsed.weeks) {
+    for (const day of week.days) {
+      for (const ex of day.exercises) {
+        liftNames.add(ex.name.trim().toLowerCase())
+        if (ex.completed) setLogs += ex.sets
+      }
+    }
+  }
+  return { weeks: parsed.weeks.length, setLogs, lifts: liftNames.size }
+}
+
+export async function importBackup(
+  json: string
+): Promise<{ weeks: number; days: number; exercises: number; setLogs: number }> {
+  // Validate BEFORE any write
+  const d = parseV2(json).data
 
   const tables = [
     db.weeks, db.days, db.exercises, db.setLogs,
     db.lifts, db.notes, db.bodyWeights, db.settings,
   ]
 
-  await db.transaction('rw', tables, async () => {
-    await Promise.all(tables.map(t => t.clear()))
+  // liveSessions is cleared too (a restore must not leave an active session
+  // pointing at deleted days) but is never part of the backup payload.
+  await db.transaction('rw', [...tables, db.liveSessions], async () => {
+    await Promise.all([...tables, db.liveSessions].map(t => t.clear()))
     await Promise.all([
       db.weeks.bulkAdd(d.weeks),
       db.days.bulkAdd(d.days),
