@@ -193,7 +193,7 @@ export function ExerciseRow({
                   }
                   openPlateCalc(exercise.plannedLoad)
                 }}
-                aria-label={`Load ${formatWeight(exercise.plannedLoad, units)} — open plate calculator`}
+                aria-label={`Load ${exercise.loadText ?? formatWeight(exercise.plannedLoad, units)} — open plate calculator`}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -207,11 +207,11 @@ export function ExerciseRow({
                   letterSpacing: '0.01em',
                 }}
               >
-                {formatWeight(exercise.plannedLoad, units)}
+                {exercise.loadText ?? formatWeight(exercise.plannedLoad, units)}
               </PressScale>
             </span>
             <span style={{ fontSize: 13, color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
-              × {exercise.plannedSets} × {exercise.plannedReps}
+              × {exercise.plannedSets} × {exercise.repsText ?? exercise.plannedReps}
             </span>
           </div>
 

@@ -1,7 +1,7 @@
 import { db, DEFAULT_SETTINGS } from './db'
 import type { Week, Day, Exercise, Note, BodyWeightEntry, Settings } from './db'
 
-type ExercisePatch = Partial<Pick<Exercise, 'liftId' | 'plannedLoad' | 'plannedSets' | 'plannedReps' | 'remarks'>>
+type ExercisePatch = Partial<Pick<Exercise, 'liftId' | 'plannedLoad' | 'plannedSets' | 'plannedReps' | 'loadText' | 'repsText' | 'remarks'>>
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@ import type { ParsedWeek } from '../lib/workoutPaste'
 
 export interface ImportResult { weeks: number; days: number; exercises: number }
 
-function weekOfLabel(isoDate: string): string {
+export function weekOfLabel(isoDate: string): string {
   const d = new Date(`${isoDate}T00:00`)
   return `Week of ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
 }

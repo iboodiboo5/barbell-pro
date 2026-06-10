@@ -153,6 +153,12 @@ export function SetLogger({ exercise, active, isLast, onFinish }: SetLoggerProps
 
       <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-dim)', marginTop: -10 }}>
         {setsDone ? 'All sets done' : `Set ${currentSet} of ${exercise.plannedSets}`}
+        {(exercise.loadText || exercise.repsText) && (
+          <span>
+            {' '}· plan {exercise.loadText ?? formatWeight(exercise.plannedLoad, units)} ×{' '}
+            {exercise.repsText ?? exercise.plannedReps}
+          </span>
+        )}
         {exercise.remarks.length > 0 && (
           <span style={{ color: 'var(--text-faint)' }}> · {exercise.remarks.join(' · ')}</span>
         )}

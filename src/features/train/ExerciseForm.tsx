@@ -180,6 +180,7 @@ export function ExerciseForm({ open, onClose, dayId, units, exercise, onDelete }
       // changed; re-converting the rounded display value would drift the
       // stored kg load a little on every lbs edit round-trip.
       const loadUntouched = exercise != null && load.trim() === initialLoad.current
+      const repsUntouched = exercise != null && reps === exercise.plannedReps
       const loadKg = units === 'lbs' ? lbsToKg(loadValue) : loadValue
       const data = {
         liftId: lift.id,
@@ -187,6 +188,9 @@ export function ExerciseForm({ open, onClose, dayId, units, exercise, onDelete }
         plannedSets: sets,
         plannedReps: reps,
         remarks,
+        // a numeric edit overrides imported display text ("30lb", "AMRAP @7-8")
+        ...(loadUntouched ? {} : { loadText: undefined }),
+        ...(repsUntouched ? {} : { repsText: undefined }),
       }
       if (exercise) await repo.updateExercise(exercise.id, data)
       else await repo.addExercise(dayId, data)
