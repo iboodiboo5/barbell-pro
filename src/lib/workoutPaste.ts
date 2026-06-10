@@ -211,7 +211,9 @@ export function parseWorkoutPaste(text: string): ParsedWeek[] {
   const weeks: ParsedWeek[] = []
   let week: ParsedWeek | null = null
   let day: ParsedDay | null = null
-  let block: Block | null = null
+  // `block` lives in an object: TS resets property narrowing on function calls,
+  // but never un-narrows closure-captured `let` locals (microsoft/TypeScript#9998).
+  const st: { block: Block | null } = { block: null }
   let supersetNext = false
   let pendingWellnessValues = false
 
@@ -233,9 +235,9 @@ export function parseWorkoutPaste(text: string): ParsedWeek[] {
   }
 
   const flushBlock = () => {
-    if (!block) return
-    const b = block
-    block = null
+    if (!st.block) return
+    const b = st.block
+    st.block = null
     ensureDay().exercises.push(blockToExercise(b))
   }
 
@@ -247,9 +249,10 @@ export function parseWorkoutPaste(text: string): ParsedWeek[] {
     supersetNext = false
   }
 
-  const openBlock = (name: string, remarks: string[]) => {
-    block = { name, rows: [], remarks, supersetWithPrev: supersetNext }
+  const openBlock = (name: string, remarks: string[]): Block => {
+    st.block = { name, rows: [], remarks, supersetWithPrev: supersetNext }
     supersetNext = false
+    return st.block
   }
 
   for (const line of lines) {
@@ -338,19 +341,20 @@ export function parseWorkoutPaste(text: string): ParsedWeek[] {
     }
 
     // inside an open block
-    if (block) {
+    const open = st.block
+    if (open) {
       if (!c0 && hasData) {
-        block.rows.push({ load: c1, sets: c2, reps: c3, extras: extraCells(cells, 4) })
+        open.rows.push({ load: c1, sets: c2, reps: c3, extras: extraCells(cells, 4) })
         continue
       }
       if (!c0 && !hasData) {
-        block.remarks.push(...extraCells(cells, 4))
+        open.remarks.push(...extraCells(cells, 4))
         continue
       }
-      if (c0 && hasData && block.rows.length === 0) {
+      if (c0 && hasData && open.rows.length === 0) {
         // cue or URL in the first data row's name cell
-        block.remarks.push(c0)
-        block.rows.push({ load: c1, sets: c2, reps: c3, extras: extraCells(cells, 4) })
+        open.remarks.push(c0)
+        open.rows.push({ load: c1, sets: c2, reps: c3, extras: extraCells(cells, 4) })
         continue
       }
       flushBlock() // named line while a block has rows → new exercise below
@@ -358,8 +362,8 @@ export function parseWorkoutPaste(text: string): ParsedWeek[] {
 
     if (c0 && hasData) {
       // single-line exercise; stays open so trailing comment rows can attach
-      openBlock(c0, [])
-      block!.rows.push({ load: c1, sets: c2, reps: c3, extras: extraCells(cells, 4) })
+      const b = openBlock(c0, [])
+      b.rows.push({ load: c1, sets: c2, reps: c3, extras: extraCells(cells, 4) })
       continue
     }
 

@@ -5,6 +5,8 @@ export interface Day { id: string; weekId: string; name: string; date?: string; 
 export interface Exercise {
   id: string; dayId: string; liftId: string
   plannedLoad: number; plannedSets: number; plannedReps: number
+  // verbatim coach-sheet values when they aren't plain kg / integer ("30lb", "AMRAP @7-8")
+  loadText?: string; repsText?: string
   remarks: string[]; order: number; updatedAt: number
 }
 export interface SetLog {
