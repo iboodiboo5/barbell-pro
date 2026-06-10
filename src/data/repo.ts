@@ -167,9 +167,10 @@ export const repo = {
   async reorderExercises(dayId: string, orderedIds: string[]): Promise<void> {
     await db.transaction('rw', db.exercises, async () => {
       for (let i = 0; i < orderedIds.length; i++) {
-        await db.exercises
-          .where({ id: orderedIds[i], dayId })
-          .modify({ order: i, updatedAt: now() })
+        const existing = await db.exercises.get(orderedIds[i])
+        if (existing && existing.dayId === dayId) {
+          await db.exercises.update(existing.id, { order: i, updatedAt: now() })
+        }
       }
     })
   },

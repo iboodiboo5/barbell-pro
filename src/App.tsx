@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useNavStore } from './navStore'
 import { TabBar } from './ui/TabBar'
+import { TrainTab } from './features/train/TrainTab'
 
 // Dev-only kitchen sink (Task 7) — removed in Task 15. Lazy so it never
 // lands in the production bundle.
@@ -35,7 +36,7 @@ function TabContent() {
           paddingTop: 'var(--safe-top)',
         }}
       >
-        {tab === 'train' && <div />}
+        {tab === 'train' && <TrainTab />}
         {tab === 'lifts' && <div />}
         {tab === 'stats' && <div />}
         {tab === 'notes' && <div />}
