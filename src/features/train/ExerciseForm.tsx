@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { db, type Exercise, type Lift } from '../../data/db'
 import { repo } from '../../data/repo'
@@ -18,6 +18,8 @@ interface ExerciseFormProps {
   units: 'kg' | 'lbs'
   /** When set, the form edits this exercise; otherwise it creates a new one. */
   exercise?: Exercise | null
+  /** Called when the user taps Delete in edit mode; the owner decides whether to confirm. */
+  onDelete?: (exercise: Exercise) => void
 }
 
 const fieldLabelStyle: CSSProperties = {
@@ -93,9 +95,13 @@ function Stepper({
   )
 }
 
-export function ExerciseForm({ open, onClose, dayId, units, exercise }: ExerciseFormProps) {
+export function ExerciseForm({ open, onClose, dayId, units, exercise, onDelete }: ExerciseFormProps) {
   const [name, setName] = useState('')
   const [load, setLoad] = useState('')
+  // The load string as hydrated on open. If the user never edits it we keep
+  // the stored kg value untouched, so lbs display rounding can't drift the
+  // saved load on every edit round-trip.
+  const initialLoad = useRef<string | null>(null)
   const [sets, setSets] = useState(3)
   const [reps, setReps] = useState(5)
   const [remarks, setRemarks] = useState<string[]>([])
@@ -117,15 +123,21 @@ export function ExerciseForm({ open, onClose, dayId, units, exercise }: Exercise
     setPicked(true)
     if (exercise) {
       const display = units === 'lbs' ? kgToLbs(exercise.plannedLoad) : exercise.plannedLoad
-      setLoad(String(Math.round(display * 10) / 10))
+      const loadStr = String(Math.round(display * 10) / 10)
+      setLoad(loadStr)
+      initialLoad.current = loadStr
       setSets(exercise.plannedSets)
       setReps(exercise.plannedReps)
       setRemarks([...exercise.remarks])
       setName('')
-      void db.lifts.get(exercise.liftId).then((lift) => setName(lift?.name ?? ''))
+      void db.lifts.get(exercise.liftId).then((lift) => {
+        // Hydration is async — never clobber text the user already typed.
+        if (lift) setName((current) => (current === '' ? lift.name : current))
+      })
     } else {
       setName('')
       setLoad('')
+      initialLoad.current = null
       setSets(3)
       setReps(5)
       setRemarks([])
@@ -164,10 +176,14 @@ export function ExerciseForm({ open, onClose, dayId, units, exercise }: Exercise
     setSaving(true)
     try {
       const lift = await resolveLift(trimmedName)
+      // Only run the units→kg conversion when the load string actually
+      // changed; re-converting the rounded display value would drift the
+      // stored kg load a little on every lbs edit round-trip.
+      const loadUntouched = exercise != null && load.trim() === initialLoad.current
       const loadKg = units === 'lbs' ? lbsToKg(loadValue) : loadValue
       const data = {
         liftId: lift.id,
-        plannedLoad: Math.round(loadKg * 100) / 100,
+        plannedLoad: loadUntouched ? exercise.plannedLoad : Math.round(loadKg * 100) / 100,
         plannedSets: sets,
         plannedReps: reps,
         remarks,
@@ -199,9 +215,9 @@ export function ExerciseForm({ open, onClose, dayId, units, exercise }: Exercise
               variant="ghost"
               fullWidth
               onClick={() => {
-                haptics.warning()
-                void repo.deleteExercise(exercise.id)
                 onClose()
+                // The owner counts logged sets and confirms before deleting.
+                onDelete?.(exercise)
               }}
               style={{ color: 'var(--danger)', border: '1px solid transparent' }}
             >

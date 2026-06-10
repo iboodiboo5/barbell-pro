@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type React from 'react'
 
 interface LongPressHandlers {
@@ -30,6 +30,14 @@ export function useLongPress(onLongPress: () => void, ms = 500): LongPressHandle
       timer.current = null
     }
   }
+
+  // Never let the 500ms timer fire after the owning component unmounts.
+  useEffect(
+    () => () => {
+      if (timer.current !== null) clearTimeout(timer.current)
+    },
+    [],
+  )
 
   return {
     onPointerDown: (e) => {

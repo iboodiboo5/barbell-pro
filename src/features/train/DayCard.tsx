@@ -15,8 +15,14 @@ import { ExerciseForm } from './ExerciseForm'
 
 interface DayCardProps {
   day: Day
+  /** True only when the day's date is literally today — controls the badge. */
   isToday: boolean
+  /** True for the one day the Start Workout button should appear on. */
+  isStartable: boolean
   units: 'kg' | 'lbs'
+  /** Id of the exercise whose swipe is open, across ALL day cards. */
+  swipeOpenId: string | null
+  onSwipeOpenChange: (id: string | null) => void
 }
 
 function formatDate(iso: string): string {
@@ -25,7 +31,7 @@ function formatDate(iso: string): string {
   return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
-export function DayCard({ day, isToday, units }: DayCardProps) {
+export function DayCard({ day, isToday, isStartable, units, swipeOpenId, onSwipeOpenChange }: DayCardProps) {
   const startLive = useNavStore((s) => s.startLive)
   const exercises = useLiveQuery(
     () => db.exercises.where('dayId').equals(day.id).sortBy('order'),
@@ -43,30 +49,43 @@ export function DayCard({ day, isToday, units }: DayCardProps) {
     }
   }, [exercises])
 
-  const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null)
   const [form, setForm] = useState<{ open: boolean; exercise: Exercise | null }>({
     open: false,
     exercise: null,
   })
   const [armedDelete, setArmedDelete] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmingExercise, setConfirmingExercise] = useState<Exercise | null>(null)
 
   const headerLongPress = useLongPress(() => {
     haptics.warning()
     setArmedDelete(true)
   })
 
-  // Tap anywhere outside the armed header → disarm. Same for an open swipe row.
+  // Tap anywhere outside the armed header → disarm.
   useEffect(() => {
-    if (!armedDelete && swipeOpenId === null) return
+    if (!armedDelete) return
     const onDocPointerDown = (e: PointerEvent) => {
       const target = e.target as HTMLElement | null
-      if (armedDelete && !target?.closest(`[data-armed-day="${day.id}"]`)) setArmedDelete(false)
-      if (swipeOpenId !== null && !target?.closest('[data-swipe-open="true"]')) setSwipeOpenId(null)
+      if (!target?.closest(`[data-armed-day="${day.id}"]`)) setArmedDelete(false)
     }
     document.addEventListener('pointerdown', onDocPointerDown, true)
     return () => document.removeEventListener('pointerdown', onDocPointerDown, true)
-  }, [armedDelete, swipeOpenId, day.id])
+  }, [armedDelete, day.id])
+
+  // Destructive-delete guard: confirm only when sets have been logged
+  // against the exercise; an unlogged exercise deletes immediately.
+  const requestDeleteExercise = (exercise: Exercise) => {
+    haptics.warning()
+    void db.setLogs
+      .where('exerciseId')
+      .equals(exercise.id)
+      .count()
+      .then((logged) => {
+        if (logged > 0) setConfirmingExercise(exercise)
+        else void repo.deleteExercise(exercise.id)
+      })
+  }
 
   return (
     <Card glow={isToday} style={{ padding: 18 }}>
@@ -139,8 +158,10 @@ export function DayCard({ day, isToday, units }: DayCardProps) {
               exercise={exercise}
               units={units}
               swipeOpen={swipeOpenId === exercise.id}
-              onSwipeOpenChange={(open) => setSwipeOpenId(open ? exercise.id : null)}
+              anySwipeOpen={swipeOpenId !== null}
+              onSwipeOpenChange={(open) => onSwipeOpenChange(open ? exercise.id : null)}
               onEdit={() => setForm({ open: true, exercise })}
+              onDelete={() => requestDeleteExercise(exercise)}
               onReorderStart={() => {
                 reordering.current = true
               }}
@@ -186,8 +207,8 @@ export function DayCard({ day, isToday, units }: DayCardProps) {
         Exercise
       </PressScale>
 
-      {/* Start Workout — today's card only */}
-      {isToday && (
+      {/* Start Workout — only on the startable day (today, else first incomplete) */}
+      {isStartable && (
         <Button
           fullWidth
           onClick={() => {
@@ -206,6 +227,23 @@ export function DayCard({ day, isToday, units }: DayCardProps) {
         dayId={day.id}
         units={units}
         exercise={form.exercise}
+        onDelete={requestDeleteExercise}
+      />
+
+      <ConfirmSheet
+        open={confirmingExercise !== null}
+        title="Delete exercise?"
+        message="This exercise has logged sets. Deleting it removes them too. This can't be undone."
+        confirmLabel="Delete exercise"
+        onConfirm={() => {
+          const exercise = confirmingExercise
+          setConfirmingExercise(null)
+          if (exercise) {
+            haptics.warning()
+            void repo.deleteExercise(exercise.id)
+          }
+        }}
+        onClose={() => setConfirmingExercise(null)}
       />
 
       <ConfirmSheet

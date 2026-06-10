@@ -8,6 +8,8 @@ interface PressScaleProps {
   className?: string
   style?: CSSProperties
   disabled?: boolean
+  /** Override focusability (e.g. -1 while the control is visually hidden). */
+  tabIndex?: number
   'aria-label'?: string
 }
 
@@ -18,6 +20,7 @@ export function PressScale({
   className,
   style,
   disabled,
+  tabIndex,
   'aria-label': ariaLabel,
 }: PressScaleProps) {
   return (
@@ -30,7 +33,7 @@ export function PressScale({
       onClick={disabled ? undefined : onClick}
       className={className}
       role={onClick ? 'button' : undefined}
-      tabIndex={onClick && !disabled ? 0 : undefined}
+      tabIndex={onClick && !disabled ? (tabIndex ?? 0) : undefined}
       onKeyDown={
         onClick && !disabled
           ? (e) => {

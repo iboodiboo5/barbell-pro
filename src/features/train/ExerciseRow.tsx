@@ -1,7 +1,6 @@
-import { motion, Reorder, useDragControls, useMotionValue, useTransform } from 'motion/react'
+import { animate, motion, Reorder, useDragControls, useMotionValue, useTransform } from 'motion/react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Exercise } from '../../data/db'
-import { repo } from '../../data/repo'
 import { formatWeight } from '../../lib/plateMath'
 import { useNavStore } from '../../navStore'
 import { haptics } from '../../ui/haptics'
@@ -13,8 +12,11 @@ interface ExerciseRowProps {
   exercise: Exercise
   units: 'kg' | 'lbs'
   swipeOpen: boolean
+  /** True while any row's swipe (this one or a sibling) is open. */
+  anySwipeOpen: boolean
   onSwipeOpenChange: (open: boolean) => void
   onEdit: () => void
+  onDelete: () => void
   onReorderStart: () => void
   onReorderEnd: () => void
 }
@@ -23,8 +25,10 @@ export function ExerciseRow({
   exercise,
   units,
   swipeOpen,
+  anySwipeOpen,
   onSwipeOpenChange,
   onEdit,
+  onDelete,
   onReorderStart,
   onReorderEnd,
 }: ExerciseRowProps) {
@@ -56,6 +60,7 @@ export function ExerciseRow({
       dragControls={dragControls}
       onDragStart={onReorderStart}
       onDragEnd={onReorderEnd}
+      data-exercise-row=""
       data-swipe-open={swipeOpen ? 'true' : undefined}
       style={{ position: 'relative', overflow: 'hidden', borderRadius: 14 }}
     >
@@ -70,13 +75,14 @@ export function ExerciseRow({
           justifyContent: 'flex-end',
           borderRadius: 14,
           overflow: 'hidden',
+          // While hidden behind the row the control must be unreachable by
+          // both pointer and keyboard (it's visually invisible).
+          pointerEvents: swipeOpen ? 'auto' : 'none',
         }}
       >
         <PressScale
-          onClick={() => {
-            haptics.warning()
-            void repo.deleteExercise(exercise.id)
-          }}
+          onClick={onDelete}
+          tabIndex={swipeOpen ? 0 : -1}
           aria-label={`Delete ${lift?.name ?? 'exercise'}`}
           style={{
             width: SWIPE_REVEAL - 8,
@@ -108,11 +114,21 @@ export function ExerciseRow({
         onDragEnd={(_, info) => {
           const next = swipeOpen ? info.offset.x < SWIPE_REVEAL / 3 : info.offset.x < -SWIPE_REVEAL / 2
           if (next !== swipeOpen) haptics.light()
+          // With dragMomentum={false} Motion leaves x wherever the finger let
+          // go, and the `animate` prop only re-runs when its target changes —
+          // so an under-threshold release (state unchanged) would strand the
+          // row mid-track. Always animate x to the resolved rest position.
+          // (This file is the template for future swipe rows: keep this.)
+          animate(x, next ? -SWIPE_REVEAL : 0, { type: 'spring', stiffness: 500, damping: 40 })
           onSwipeOpenChange(next)
         }}
         onClick={() => {
-          if (swipeOpen) {
+          // A tap on a displaced row (half-open or still settling), or while
+          // any sibling row's swipe is open, dismisses swipes — it never opens
+          // the edit sheet.
+          if (swipeOpen || anySwipeOpen || Math.abs(x.get()) > 1) {
             onSwipeOpenChange(false)
+            animate(x, 0, { type: 'spring', stiffness: 500, damping: 40 })
           } else {
             haptics.light()
             onEdit()
@@ -136,6 +152,11 @@ export function ExerciseRow({
           <button
             onClick={(e) => {
               e.stopPropagation()
+              if (anySwipeOpen) {
+                // An open swipe anywhere turns this tap into "dismiss".
+                onSwipeOpenChange(false)
+                return
+              }
               haptics.light()
               openLift(exercise.liftId)
             }}

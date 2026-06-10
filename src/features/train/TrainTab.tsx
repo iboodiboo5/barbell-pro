@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { motion, type Variants } from 'motion/react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Day } from '../../data/db'
@@ -149,11 +149,44 @@ export function TrainTab() {
     [selectedWeekDbId],
   )
 
+  const today = todayIso()
+
+  // The single day that shows the Start Workout button: the day dated today,
+  // else the first incomplete day (has at least one exercise with zero logged
+  // sets), else the first day. Distinct from the TODAY badge, which only ever
+  // appears on a day literally dated today.
+  const startableDayId = useLiveQuery(async () => {
+    if (!days || days.length === 0) return undefined
+    const todayDay = days.find((d) => d.date === today)
+    if (todayDay) return todayDay.id
+    for (const day of days) {
+      const exercises = await db.exercises.where('dayId').equals(day.id).toArray()
+      if (exercises.length === 0) continue
+      for (const exercise of exercises) {
+        const logged = await db.setLogs.where('exerciseId').equals(exercise.id).count()
+        if (logged === 0) return day.id
+      }
+    }
+    return days[0].id
+  }, [days, today])
+
+  // One open swipe row across every day card, so a tap on any other row can
+  // only dismiss it (never fall through to that row's edit sheet).
+  const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null)
+  useEffect(() => {
+    if (swipeOpenId === null) return
+    const onDocPointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null
+      // Taps on exercise rows are handled by the rows themselves (close-only).
+      if (!target?.closest('[data-exercise-row]')) setSwipeOpenId(null)
+    }
+    document.addEventListener('pointerdown', onDocPointerDown, true)
+    return () => document.removeEventListener('pointerdown', onDocPointerDown, true)
+  }, [swipeOpenId])
+
   if (!weeks || !settings) return null
 
   const units = settings.units
-  const today = todayIso()
-  const todayDayId = days?.find((d) => d.date === today)?.id ?? days?.[0]?.id
 
   return (
     <div style={{ paddingTop: 8 }}>
@@ -248,7 +281,14 @@ export function TrainTab() {
               )}
               {days.map((day) => (
                 <motion.div key={day.id} variants={itemVariants}>
-                  <DayCard day={day} isToday={day.id === todayDayId} units={units} />
+                  <DayCard
+                    day={day}
+                    isToday={day.date === today}
+                    isStartable={day.id === startableDayId}
+                    units={units}
+                    swipeOpenId={swipeOpenId}
+                    onSwipeOpenChange={setSwipeOpenId}
+                  />
                 </motion.div>
               ))}
               <motion.div variants={itemVariants}>
