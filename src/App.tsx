@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useNavStore } from './navStore'
 import { TabBar } from './ui/TabBar'
@@ -12,12 +12,6 @@ import { LiftDetail } from './features/lifts/LiftDetail'
 import { StatsTab } from './features/stats/StatsTab'
 import { NotesTab } from './features/notes/NotesTab'
 import { ToastHost } from './ui/Toast'
-
-// Dev-only kitchen sink (Task 7) — removed in Task 15. Lazy so it never
-// lands in the production bundle.
-const DevGallery = import.meta.env.DEV
-  ? lazy(() => import('./ui/DevGallery').then((m) => ({ default: m.DevGallery })))
-  : null
 
 const tabVariants = {
   initial: { opacity: 0, y: 8 },
@@ -55,7 +49,6 @@ function TabContent() {
 }
 
 export default function App() {
-  const [devOpen, setDevOpen] = useState(false)
   const liveActive = useNavStore((s) => s.liveActive)
   const liftDetailId = useNavStore((s) => s.liftDetailId)
 
@@ -71,44 +64,7 @@ export default function App() {
 
   return (
     <>
-      {devOpen && DevGallery ? (
-        <div
-          style={{
-            minHeight: '100dvh',
-            paddingBottom: 'calc(64px + var(--safe-bottom))',
-            paddingTop: 'var(--safe-top)',
-          }}
-        >
-          <Suspense fallback={null}>
-            <DevGallery />
-          </Suspense>
-        </div>
-      ) : (
-        <TabContent />
-      )}
-      {import.meta.env.DEV && (
-        <button
-          onClick={() => setDevOpen((v) => !v)}
-          aria-label="Toggle dev gallery"
-          style={{
-            position: 'fixed',
-            top: 'calc(12px + var(--safe-top))',
-            right: 12,
-            zIndex: 400,
-            padding: '4px 10px',
-            borderRadius: 999,
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: '0.06em',
-            background: devOpen ? 'var(--accent)' : 'var(--surface-2)',
-            color: devOpen ? 'var(--text)' : 'var(--text-dim)',
-            border: '1px solid var(--border-strong)',
-            cursor: 'pointer',
-          }}
-        >
-          DEV
-        </button>
-      )}
+      <TabContent />
       <AnimatePresence>{liveActive && <LiveWorkout />}</AnimatePresence>
       <AnimatePresence>{liftDetailId && <LiftDetail liftId={liftDetailId} />}</AnimatePresence>
       <PlateCalcSheet />

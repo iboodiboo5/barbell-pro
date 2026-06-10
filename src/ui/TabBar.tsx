@@ -70,7 +70,7 @@ export function TabBar() {
         alignItems: 'stretch',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        background: 'rgba(18,18,26,.85)',
+        background: 'var(--surface-frost)',
         borderTop: '1px solid var(--border)',
         paddingBottom: 'var(--safe-bottom)',
         zIndex: 100,

@@ -16,6 +16,9 @@
   --danger: #ff453a;
   --gold: #ffd60a;
   --gold-soft: rgba(255, 214, 10, .08);
+  /* frosted tab-bar surface (surface @ 85%) and light press overlay */
+  --surface-frost: rgba(18, 18, 26, .85);
+  --overlay-light: rgba(255, 255, 255, .18);
   /* dark text for on-gold / on-success chips */
   --on-gold: #1a1400;
   --on-success: #04240e;

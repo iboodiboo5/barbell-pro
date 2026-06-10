@@ -110,7 +110,7 @@ function WeekPill({ week, active, armed, onTap, onArm, onConfirmRequest, onDupli
             padding: 0,
             border: 'none',
             borderRadius: '50%',
-            background: 'rgba(255,255,255,.18)',
+            background: 'var(--overlay-light)',
             color: 'inherit',
             cursor: 'pointer',
           }}
