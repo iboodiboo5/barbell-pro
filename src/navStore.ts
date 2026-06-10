@@ -12,6 +12,10 @@ interface NavState {
   liveDayId: string | null
   startLive: (dayId: string) => void
   endLive: () => void
+  /** Target weight (kg) the plate calculator sheet is open for; null = closed. */
+  plateCalcKg: number | null
+  openPlateCalc: (kg: number) => void
+  closePlateCalc: () => void
 }
 
 export const useNavStore = create<NavState>((set) => ({
@@ -24,4 +28,7 @@ export const useNavStore = create<NavState>((set) => ({
   liveDayId: null,
   startLive: (dayId) => set({ liveActive: true, liveDayId: dayId }),
   endLive: () => set({ liveActive: false, liveDayId: null }),
+  plateCalcKg: null,
+  openPlateCalc: (kg) => set({ plateCalcKg: kg }),
+  closePlateCalc: () => set({ plateCalcKg: null }),
 }))

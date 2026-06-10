@@ -34,6 +34,7 @@ export function ExerciseRow({
 }: ExerciseRowProps) {
   const dragControls = useDragControls()
   const openLift = useNavStore((s) => s.openLift)
+  const openPlateCalc = useNavStore((s) => s.openPlateCalc)
   const lift = useLiveQuery(() => db.lifts.get(exercise.liftId), [exercise.liftId])
 
   const todayStr = new Date().toDateString()
@@ -182,11 +183,17 @@ export function ExerciseRow({
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-            {/* TODO(Task 9): tapping the load chip opens the plate calculator sheet. */}
             <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
               <PressScale
-                onClick={() => {}}
-                aria-label={`Load ${formatWeight(exercise.plannedLoad, units)}`}
+                onClick={() => {
+                  if (anySwipeOpen) {
+                    // An open swipe anywhere turns this tap into "dismiss".
+                    onSwipeOpenChange(false)
+                    return
+                  }
+                  openPlateCalc(exercise.plannedLoad)
+                }}
+                aria-label={`Load ${formatWeight(exercise.plannedLoad, units)} — open plate calculator`}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',

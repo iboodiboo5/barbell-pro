@@ -3,6 +3,8 @@ import { motion, type Variants } from 'motion/react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Day } from '../../data/db'
 import { repo } from '../../data/repo'
+import { useNavStore } from '../../navStore'
+import { LAST_CALC_WEIGHT_KEY } from '../plate-calc/PlateCalcSheet'
 import { Button } from '../../ui/Button'
 import { PressScale } from '../../ui/PressScale'
 import { haptics } from '../../ui/haptics'
@@ -135,6 +137,7 @@ function BarbellGraphic() {
 export function TrainTab() {
   const weeks = useLiveQuery(() => db.weeks.orderBy('order').toArray(), [])
   const settings = useLiveQuery(() => repo.getSettings(), [])
+  const openPlateCalc = useNavStore((s) => s.openPlateCalc)
 
   const [selectedWeekId, setSelectedWeekId] = useState<string | null>(null)
   // Default to the most recent week; fall back gracefully if the selected one
@@ -200,6 +203,32 @@ export function TrainTab() {
         }}
       >
         <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em' }}>Train</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <PressScale
+          onClick={() => {
+            const last = Number(localStorage.getItem(LAST_CALC_WEIGHT_KEY))
+            openPlateCalc(Number.isFinite(last) && last > 0 ? last : 60)
+          }}
+          aria-label="Plate calculator"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-dim)',
+          }}
+        >
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M6.5 12h11" />
+            <path d="M6.5 7.5v9M17.5 7.5v9" />
+            <path d="M3.5 9.5v5M20.5 9.5v5" />
+            <path d="M2 12h1.5M20.5 12h1.5" />
+          </svg>
+        </PressScale>
         {/* TODO(Task 10): open the Settings sheet from here. */}
         <PressScale
           onClick={() => {}}
@@ -221,6 +250,7 @@ export function TrainTab() {
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </PressScale>
+        </div>
       </header>
 
       {weeks.length === 0 ? (
