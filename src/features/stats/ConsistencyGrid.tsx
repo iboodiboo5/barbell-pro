@@ -47,7 +47,8 @@ export function ConsistencyGrid({ weeks, streak, targetPerWeek }: ConsistencyGri
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {shown.map((w, rowIdx) => {
           const slots = Math.max(targetPerWeek, Math.min(w.sessions, 7))
-          const label = new Date(w.weekStart).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+          // 'T00:00' forces local-midnight parsing (bare ISO dates parse as UTC)
+          const label = new Date(`${w.weekStart}T00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
           return (
             <div key={w.weekStart} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ width: 52, fontSize: 12, fontWeight: 600, color: 'var(--text-faint)', flexShrink: 0 }}>

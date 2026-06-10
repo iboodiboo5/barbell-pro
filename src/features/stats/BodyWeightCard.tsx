@@ -47,10 +47,11 @@ export function BodyWeightCard({ units }: { units: 'kg' | 'lbs' }) {
     toast('Bodyweight logged')
   }
 
+  // 'T00:00' forces local-midnight parsing (bare ISO dates parse as UTC)
   const points = (entries ?? []).map((e) => ({
-    x: new Date(e.date).getTime(),
+    x: new Date(`${e.date}T00:00`).getTime(),
     y: Math.round((units === 'kg' ? e.weightKg : kgToLbs(e.weightKg)) * 10) / 10,
-    label: new Date(e.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+    label: new Date(`${e.date}T00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
   }))
 
   const draftDisplay = draftKg !== null
@@ -66,7 +67,7 @@ export function BodyWeightCard({ units }: { units: 'kg' | 'lbs' }) {
           </span>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-faint)' }}>
             {latest
-              ? `logged ${new Date(latest.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+              ? `logged ${new Date(`${latest.date}T00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
               : 'no entries yet'}
           </span>
         </div>

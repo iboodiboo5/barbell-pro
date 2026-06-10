@@ -65,9 +65,9 @@ export function StatsTab() {
   const volumePoints = [...volumeByWeek.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([ws, volKg]) => ({
-      x: new Date(ws).getTime(),
+      x: new Date(`${ws}T00:00`).getTime(),
       y: Math.round(units === 'kg' ? volKg : kgToLbs(volKg)),
-      label: `wk ${new Date(ws).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`,
+      label: `wk ${new Date(`${ws}T00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`,
     }))
 
   return (
