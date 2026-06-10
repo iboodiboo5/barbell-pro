@@ -10,6 +10,7 @@ import { PressScale } from '../../ui/PressScale'
 import { haptics } from '../../ui/haptics'
 import { WeekPills } from './WeekPills'
 import { DayCard } from './DayCard'
+import { ImportSheet } from './ImportSheet'
 
 const listVariants: Variants = {
   hidden: {},
@@ -141,6 +142,7 @@ export function TrainTab() {
   const openSettings = useNavStore((s) => s.openSettings)
 
   const [selectedWeekId, setSelectedWeekId] = useState<string | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
   // Default to the most recent week; fall back gracefully if the selected one
   // was deleted.
   const selectedWeek =
@@ -205,6 +207,27 @@ export function TrainTab() {
       >
         <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em' }}>Train</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <PressScale
+          onClick={() => setImportOpen(true)}
+          aria-label="Import workouts"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-dim)',
+          }}
+        >
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3v11" />
+            <path d="M8 10l4 4 4-4" />
+            <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+          </svg>
+        </PressScale>
         <PressScale
           onClick={() => {
             const last = Number(localStorage.getItem(LAST_CALC_WEIGHT_KEY))
@@ -328,6 +351,12 @@ export function TrainTab() {
           )}
         </>
       )}
+
+      <ImportSheet
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={setSelectedWeekId}
+      />
     </div>
   )
 }
