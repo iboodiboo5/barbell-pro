@@ -1,5 +1,5 @@
 import { motion } from 'motion/react'
-import { useNavStore, Tab } from '../navStore'
+import { useNavStore, type Tab } from '../navStore'
 
 interface TabConfig {
   id: Tab
@@ -83,6 +83,7 @@ export function TabBar() {
           <button
             key={t.id}
             aria-label={t.label}
+            aria-current={active ? 'page' : undefined}
             onClick={() => setTab(t.id)}
             style={{
               flex: 1,

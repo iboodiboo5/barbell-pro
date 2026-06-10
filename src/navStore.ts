@@ -10,6 +10,8 @@ interface NavState {
   closeLift: () => void
   liveActive: boolean
   liveDayId: string | null
+  startLive: (dayId: string) => void
+  endLive: () => void
 }
 
 export const useNavStore = create<NavState>((set) => ({
@@ -20,4 +22,6 @@ export const useNavStore = create<NavState>((set) => ({
   closeLift: () => set({ liftDetailId: null }),
   liveActive: false,
   liveDayId: null,
+  startLive: (dayId) => set({ liveActive: true, liveDayId: dayId }),
+  endLive: () => set({ liveActive: false, liveDayId: null }),
 }))
