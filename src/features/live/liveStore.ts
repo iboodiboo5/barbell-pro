@@ -96,21 +96,37 @@ const initialState = {
   summary: null as SessionSummaryData | null,
 }
 
+// Serializes startSession so a double-invoked mount effect (React StrictMode)
+// can't create two LiveSession rows.
+let startInFlight: Promise<void> | null = null
+
 export const useLiveStore = create<LiveState>((set, get) => ({
   ...initialState,
 
   async startSession(dayId) {
-    const exercises = (await db.exercises.where('dayId').equals(dayId).toArray())
-      .sort((a, b) => a.order - b.order)
-    const session: LiveSession = {
-      id: crypto.randomUUID(),
-      dayId,
-      startedAt: Date.now(),
-      currentExerciseIndex: 0,
-      updatedAt: Date.now(),
-    }
-    await db.liveSessions.add(session)
-    set({ ...initialState, session, exercises })
+    if (startInFlight) return startInFlight
+    startInFlight = (async () => {
+      // Any still-open session is an interrupted one being replaced — close it.
+      const stale = await db.liveSessions.filter(s => !s.finishedAt).toArray()
+      if (stale.length > 0) {
+        const at = Date.now()
+        await db.liveSessions.bulkPut(stale.map(s => ({ ...s, finishedAt: at, updatedAt: at })))
+      }
+      const exercises = (await db.exercises.where('dayId').equals(dayId).toArray())
+        .sort((a, b) => a.order - b.order)
+      const session: LiveSession = {
+        id: crypto.randomUUID(),
+        dayId,
+        startedAt: Date.now(),
+        currentExerciseIndex: 0,
+        updatedAt: Date.now(),
+      }
+      await db.liveSessions.add(session)
+      set({ ...initialState, session, exercises })
+    })().finally(() => {
+      startInFlight = null
+    })
+    return startInFlight
   },
 
   async resumeIfActive() {

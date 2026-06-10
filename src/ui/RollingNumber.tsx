@@ -4,6 +4,8 @@ import type { CSSProperties } from 'react'
 interface RollingNumberProps {
   value: number
   decimals?: number
+  /** Left-pad the formatted value with zeros to this many characters (e.g. 2 → "05"). */
+  pad?: number
   style?: CSSProperties
 }
 
@@ -42,8 +44,8 @@ function DigitColumn({ digit }: { digit: number }) {
 }
 
 /** Odometer-style rolling number. Non-digit chars (".", ":", "-") render static. */
-export function RollingNumber({ value, decimals = 0, style }: RollingNumberProps) {
-  const text = value.toFixed(decimals)
+export function RollingNumber({ value, decimals = 0, pad = 0, style }: RollingNumberProps) {
+  const text = value.toFixed(decimals).padStart(pad, '0')
   const chars = text.split('')
 
   return (

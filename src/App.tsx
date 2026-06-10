@@ -1,10 +1,12 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useNavStore } from './navStore'
 import { TabBar } from './ui/TabBar'
 import { TrainTab } from './features/train/TrainTab'
 import { PlateCalcSheet } from './features/plate-calc/PlateCalcSheet'
 import { SettingsSheet } from './features/settings/SettingsSheet'
+import { LiveWorkout } from './features/live/LiveWorkout'
+import { useLiveStore } from './features/live/liveStore'
 import { ToastHost } from './ui/Toast'
 
 // Dev-only kitchen sink (Task 7) — removed in Task 15. Lazy so it never
@@ -50,6 +52,17 @@ function TabContent() {
 
 export default function App() {
   const [devOpen, setDevOpen] = useState(false)
+  const liveActive = useNavStore((s) => s.liveActive)
+
+  // Resume an interrupted live session on launch (app killed mid-workout).
+  useEffect(() => {
+    void useLiveStore.getState().resumeIfActive().then((resumed) => {
+      if (resumed) {
+        const session = useLiveStore.getState().session
+        if (session) useNavStore.getState().startLive(session.dayId)
+      }
+    })
+  }, [])
 
   return (
     <>
@@ -91,6 +104,7 @@ export default function App() {
           DEV
         </button>
       )}
+      <AnimatePresence>{liveActive && <LiveWorkout />}</AnimatePresence>
       <PlateCalcSheet />
       <SettingsSheet />
       <TabBar />

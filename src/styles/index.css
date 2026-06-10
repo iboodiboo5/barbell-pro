@@ -15,6 +15,10 @@
   --success: #30d158;
   --danger: #ff453a;
   --gold: #ffd60a;
+  --gold-soft: rgba(255, 214, 10, .08);
+  /* dark text for on-gold / on-success chips */
+  --on-gold: #1a1400;
+  --on-success: #04240e;
   /* IPF plate color coding by denomination (kg) */
   --plate-25: #d62828;
   --plate-20: #1d6fd6;
