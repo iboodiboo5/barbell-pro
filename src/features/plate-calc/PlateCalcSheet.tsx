@@ -61,6 +61,7 @@ export function PlateCalcSheet() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [typing, setTyping] = useState(false)
   const [draft, setDraft] = useState('')
+  const [seededDraft, setSeededDraft] = useState('')
 
   // On open: seed the target and re-read settings (they change rarely).
   useEffect(() => {
@@ -92,15 +93,21 @@ export function PlateCalcSheet() {
   }
 
   const commitDraft = (withUnits: 'kg' | 'lbs') => {
-    const v = parseFloat(draft.replace(',', '.'))
-    if (Number.isFinite(v) && v >= 0) {
-      setKg(clampKg(withUnits === 'lbs' ? lbsToKg(v) : v))
+    // Skip commit when the user never changed the seeded value — avoids
+    // lbs round-trip drift (e.g. "100" lbs → lbsToKg → 100.02 kg).
+    if (draft !== seededDraft) {
+      const v = parseFloat(draft.replace(',', '.'))
+      if (Number.isFinite(v) && v >= 0) {
+        setKg(clampKg(withUnits === 'lbs' ? lbsToKg(v) : v))
+      }
     }
     setTyping(false)
   }
 
   const beginTyping = () => {
-    setDraft(String(displayValue))
+    const seeded = String(displayValue)
+    setSeededDraft(seeded)
+    setDraft(seeded)
     setTyping(true)
   }
 
@@ -231,47 +238,54 @@ export function PlateCalcSheet() {
             PER SIDE
           </span>
           {groups.length > 0 ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-              {groups.map((g) => (
-                <span
-                  key={g.denom}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 7,
-                    padding: '4px 11px',
-                    borderRadius: 999,
-                    background: 'var(--surface-2)',
-                    border: '1px solid var(--border)',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontVariantNumeric: 'tabular-nums',
-                    color: 'var(--text)',
-                  }}
-                >
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+                {groups.map((g) => (
                   <span
-                    aria-hidden="true"
+                    key={g.denom}
                     style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: plateColor(g.denom),
-                      // text-faint ring keeps the dark 2.5 kg dot visible
-                      boxShadow: '0 0 0 1px var(--text-faint)',
-                      flexShrink: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      padding: '4px 11px',
+                      borderRadius: 999,
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border)',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      fontVariantNumeric: 'tabular-nums',
+                      color: 'var(--text)',
                     }}
-                  />
-                  {g.denom} ×{g.count}
-                </span>
-              ))}
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: plateColor(g.denom),
+                        // text-faint ring keeps the dark 2.5 kg dot visible
+                        boxShadow: '0 0 0 1px var(--text-faint)',
+                        flexShrink: 0,
+                      }}
+                    />
+                    {g.denom} ×{g.count}
+                  </span>
+                ))}
+              </div>
             </div>
+          ) : kg < barWeightKg ? (
+            <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+              Bar alone is {formatWeight(barWeightKg, units)} — above your target
+            </span>
           ) : (
             <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>Empty bar — no plates needed</span>
           )}
         </div>
 
-        {/* remainder warning when the target isn't exactly loadable */}
-        {remainder > 0.001 && (
+        {/* remainder warning when the target isn't exactly loadable.
+            Threshold 0.05 kg avoids "0 lbs short" noise from display rounding. */}
+        {remainder >= 0.05 && (
           <div
             role="status"
             style={{
