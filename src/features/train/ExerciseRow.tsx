@@ -32,6 +32,17 @@ export function ExerciseRow({
   const openLift = useNavStore((s) => s.openLift)
   const lift = useLiveQuery(() => db.lifts.get(exercise.liftId), [exercise.liftId])
 
+  const todayStr = new Date().toDateString()
+  const completedCount = useLiveQuery(
+    () =>
+      db.setLogs
+        .where('exerciseId')
+        .equals(exercise.id)
+        .filter((s) => !s.isWarmup && new Date(s.completedAt).toDateString() === todayStr)
+        .count(),
+    [exercise.id, todayStr],
+  ) ?? 0
+
   // Tie the delete layer's visibility to the actual swipe offset so it never
   // peeks out from behind the row's rounded corners at rest.
   const x = useMotionValue(0)
@@ -175,6 +186,49 @@ export function ExerciseRow({
               × {exercise.plannedSets} × {exercise.plannedReps}
             </span>
           </div>
+
+          {/* Per-set completion dots */}
+          {(() => {
+            const total = exercise.plannedSets
+            const filled = completedCount >= total ? total : completedCount
+            const dots = Array.from({ length: total }, (_, i) => i < filled)
+            return (
+              <div
+                aria-label={`${filled} of ${total} sets completed`}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 7 }}
+              >
+                {dots.map((isDone, i) =>
+                  isDone ? (
+                    <motion.div
+                      key={i}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: 'var(--accent)',
+                        flexShrink: 0,
+                      }}
+                    />
+                  ) : (
+                    <div
+                      key={i}
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: 'transparent',
+                        border: '1px solid var(--border-strong)',
+                        flexShrink: 0,
+                      }}
+                    />
+                  )
+                )}
+              </div>
+            )
+          })()}
 
           {exercise.remarks.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>

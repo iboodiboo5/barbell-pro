@@ -92,6 +92,29 @@ describe('repo', () => {
     expect(await db.setLogs.get('s2')).toBeDefined()
   })
 
+  it('reorderExercises respects day scoping and skips foreign ids', async () => {
+    const w = await repo.addWeek('W')
+    const dayA = await repo.addDay(w.id, 'Day A')
+    const dayB = await repo.addDay(w.id, 'Day B')
+    const a1 = await repo.addExercise(dayA.id, { liftId: 'l1', plannedLoad: 100, plannedSets: 3, plannedReps: 5, remarks: [] })
+    const a2 = await repo.addExercise(dayA.id, { liftId: 'l2', plannedLoad: 80, plannedSets: 4, plannedReps: 8, remarks: [] })
+    const b1 = await repo.addExercise(dayB.id, { liftId: 'l3', plannedLoad: 60, plannedSets: 3, plannedReps: 10, remarks: [] })
+    const b1OriginalOrder = b1.order
+
+    // Call reorderExercises on dayA with a2 first, then a1, then b1 (foreign)
+    await expect(repo.reorderExercises(dayA.id, [a2.id, a1.id, b1.id])).resolves.toBeUndefined()
+
+    const a2Updated = await db.exercises.get(a2.id)
+    const a1Updated = await db.exercises.get(a1.id)
+    const b1Updated = await db.exercises.get(b1.id)
+
+    // a2 should now be order 0, a1 order 1
+    expect(a2Updated?.order).toBe(0)
+    expect(a1Updated?.order).toBe(1)
+    // b1 belongs to dayB — its order must be unchanged
+    expect(b1Updated?.order).toBe(b1OriginalOrder)
+  })
+
   it('deleteExercise cascades its setLogs but leaves sibling exercises', async () => {
     const w = await repo.addWeek('W')
     const d = await repo.addDay(w.id, 'Push')
