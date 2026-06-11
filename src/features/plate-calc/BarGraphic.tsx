@@ -8,9 +8,21 @@ interface BarGraphicProps {
   barWeightKg: number
 }
 
-/** IPF color-coding token for a kg denomination; lb plates are iron gray. */
+/** IPF color-coding token for a kg denomination. lb plates follow the US
+ *  competition convention, which mirrors the kg-equivalent's IPF hue
+ *  (45 lb ≈ 20 kg → blue); change plates per the lb change-plate standard. */
 export function plateColor(value: number, unit: 'kg' | 'lb' = 'kg'): string {
-  if (unit === 'lb') return 'var(--plate-lb)'
+  if (unit === 'lb') {
+    if (value === 55) return 'var(--plate-25)' // red
+    if (value === 45) return 'var(--plate-20)' // blue
+    if (value === 35) return 'var(--plate-15)' // yellow
+    if (value === 25) return 'var(--plate-10)' // green
+    if (value === 15) return 'var(--plate-2-5)' // black — no comp standard; commercial 15s are black
+    if (value === 10) return 'var(--plate-5)' // white
+    if (value === 5) return 'var(--plate-20)' // blue change plate
+    if (value === 2.5) return 'var(--plate-10)' // green change plate
+    return 'var(--plate-lb)'
+  }
   if (value === 25) return 'var(--plate-25)'
   if (value === 20) return 'var(--plate-20)'
   if (value === 15) return 'var(--plate-15)'
