@@ -120,17 +120,17 @@ function BarbellGraphic() {
   return (
     <svg width="180" height="72" viewBox="0 0 180 72" fill="none" aria-hidden="true">
       {/* bar */}
-      <rect x="6" y="33" width="168" height="6" rx="3" fill="var(--border-strong)" />
-      {/* sleeves */}
-      <rect x="22" y="31" width="10" height="10" rx="3" fill="var(--text-faint)" />
-      <rect x="148" y="31" width="10" height="10" rx="3" fill="var(--text-faint)" />
-      {/* plates — accent, biggest inside */}
-      <rect x="34" y="8" width="12" height="56" rx="5" fill="var(--accent)" opacity="0.9" />
-      <rect x="48" y="16" width="10" height="40" rx="4" fill="var(--accent)" opacity="0.55" />
-      <rect x="60" y="22" width="8" height="28" rx="4" fill="var(--accent)" opacity="0.3" />
-      <rect x="134" y="8" width="12" height="56" rx="5" fill="var(--accent)" opacity="0.9" />
-      <rect x="122" y="16" width="10" height="40" rx="4" fill="var(--accent)" opacity="0.55" />
-      <rect x="112" y="22" width="8" height="28" rx="4" fill="var(--accent)" opacity="0.3" />
+      <rect x="4" y="33" width="172" height="6" rx="3" fill="var(--border-strong)" />
+      {/* plates loaded like a real bar: biggest at the shoulder (toward the
+          centre), descending outward, collar clipped outside the stack */}
+      <rect x="46" y="8" width="13" height="56" rx="5" fill="var(--accent)" opacity="0.95" />
+      <rect x="34" y="15" width="10" height="42" rx="4" fill="var(--accent)" opacity="0.6" />
+      <rect x="24" y="22" width="8" height="28" rx="3.5" fill="var(--accent)" opacity="0.32" />
+      <rect x="15" y="28" width="6" height="16" rx="3" fill="var(--text-faint)" />
+      <rect x="121" y="8" width="13" height="56" rx="5" fill="var(--accent)" opacity="0.95" />
+      <rect x="136" y="15" width="10" height="42" rx="4" fill="var(--accent)" opacity="0.6" />
+      <rect x="148" y="22" width="8" height="28" rx="3.5" fill="var(--accent)" opacity="0.32" />
+      <rect x="159" y="28" width="6" height="16" rx="3" fill="var(--text-faint)" />
     </svg>
   )
 }
