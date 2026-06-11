@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { useNavStore } from '../../navStore'
 import { repo } from '../../data/repo'
 import { DEFAULT_SETTINGS, type Settings } from '../../data/db'
@@ -29,8 +30,8 @@ function StepButton({ sign, onClick }: { sign: '+' | '−'; onClick: () => void 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: 54,
-        height: 54,
+        width: 46,
+        height: 46,
         borderRadius: '50%',
         background: 'var(--surface-2)',
         border: '1px solid var(--border-strong)',
@@ -207,72 +208,96 @@ export function PlateCalcSheet() {
 
         <BarGraphic perSide={perSide} barWeightKg={barWeightKg} />
 
-        {/* per-side plate chips — tap to remove one */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+        {/* on-the-bar rail — fixed height + single line so adding/removing
+            plates never shifts the palette and Done button below it */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, width: '100%' }}>
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-faint)' }}>
-            PER SIDE · TAP TO REMOVE
+            ON THE BAR · TAP TO REMOVE
           </span>
-          {groups.length > 0 ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-              {groups.map((g) => (
-                <PressScale
-                  key={`${g.plate.value}-${g.plate.unit}`}
-                  onClick={() => dropPlate(g.plate)}
-                  aria-label={`Remove one ${g.plate.value} ${g.plate.unit} plate per side`}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 7,
-                    padding: '6px 12px',
-                    borderRadius: 999,
-                    background: 'var(--surface-2)',
-                    border: '1px solid var(--border)',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontVariantNumeric: 'tabular-nums',
-                    color: 'var(--text)',
-                  }}
-                >
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: plateColor(g.plate.value, g.plate.unit),
-                      // text-faint ring keeps the dark 2.5 kg dot visible
-                      boxShadow: '0 0 0 1px var(--text-faint)',
-                      flexShrink: 0,
-                    }}
-                  />
-                  {g.plate.value} {g.plate.unit} ×{g.count}
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-                    <path d="M5 12h14" />
-                  </svg>
-                </PressScale>
-              ))}
-            </div>
-          ) : (
-            <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-              Empty bar — {formatWeight(barWeightKg, units)}
-            </span>
-          )}
+          <div
+            className="no-scrollbar"
+            style={{ width: '100%', height: 38, overflowX: 'auto', overflowY: 'hidden' }}
+          >
+            {groups.length > 0 ? (
+              // max-content + auto margins: centered while the chips fit,
+              // horizontally scrollable once they overflow — never wraps.
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: '100%', width: 'max-content', margin: '0 auto', padding: '0 16px' }}>
+                <AnimatePresence initial={false}>
+                  {groups.map((g) => (
+                    <motion.span
+                      key={`${g.plate.value}-${g.plate.unit}`}
+                      layout
+                      initial={{ opacity: 0, scale: 0.6 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.6 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                      style={{ display: 'inline-flex', flexShrink: 0 }}
+                    >
+                      <PressScale
+                        onClick={() => dropPlate(g.plate)}
+                        aria-label={`Remove one ${g.plate.value} ${g.plate.unit} plate per side`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 7,
+                          padding: '6px 12px',
+                          borderRadius: 999,
+                          background: 'var(--surface-2)',
+                          border: '1px solid var(--border)',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          fontVariantNumeric: 'tabular-nums',
+                          color: 'var(--text)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background: plateColor(g.plate.value, g.plate.unit),
+                            // text-faint ring keeps the dark 2.5 kg dot visible
+                            boxShadow: '0 0 0 1px var(--text-faint)',
+                            flexShrink: 0,
+                          }}
+                        />
+                        {g.plate.value} {g.plate.unit} ×{g.count}
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                          <path d="M5 12h14" />
+                        </svg>
+                      </PressScale>
+                    </motion.span>
+                  ))}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+                  Empty bar — {formatWeight(barWeightKg, units)}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* palette — mixed-plate gyms: add kg and lb plates freely */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', alignItems: 'center' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-faint)' }}>
+        {/* palette — mixed-plate gyms: add kg and lb plates freely. Both unit
+            rows share one 7-column grid so kg and lb discs align column-for-
+            column (extra plates wrap onto further aligned grid rows). */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
+          <span style={{ alignSelf: 'center', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-faint)' }}>
             ADD PLATES
           </span>
           {([
             { unit: 'kg' as const, values: platesKg },
             { unit: 'lb' as const, values: LB_PLATES },
           ]).map(({ unit, values }) => (
-            <div key={unit} style={{ display: 'flex', alignItems: 'center', gap: 7, width: '100%', justifyContent: 'center' }}>
-              <span style={{ width: 18, fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textAlign: 'right', flexShrink: 0 }}>
+            <div key={unit} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', paddingLeft: 2 }}>
                 {unit}
               </span>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, justifyContent: 'flex-start' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 7, justifyItems: 'center' }}>
                 {values.map((value) => (
                   <PressScale
                     key={value}
@@ -292,7 +317,6 @@ export function PlateCalcSheet() {
                       fontWeight: 700,
                       fontVariantNumeric: 'tabular-nums',
                       color: 'var(--text)',
-                      flexShrink: 0,
                     }}
                   >
                     {value}
