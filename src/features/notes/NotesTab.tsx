@@ -8,7 +8,7 @@ import { Sheet } from '../../ui/Sheet'
 import { Button } from '../../ui/Button'
 import { PressScale } from '../../ui/PressScale'
 import { haptics } from '../../ui/haptics'
-import { relativeDate } from '../lifts/LiftsTab'
+import { relativeDate } from '../lifts/LiftList'
 
 const SWIPE_REVEAL = 96
 const UNDO_MS = 4000
