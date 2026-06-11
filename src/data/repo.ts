@@ -205,6 +205,7 @@ export const repo = {
       ? { ...DEFAULT_SETTINGS, ...stored }
       : { ...DEFAULT_SETTINGS }
     merged.platesKg = [...merged.platesKg]
+    merged.statCards = merged.statCards.map((card) => [...card])
     return merged
   },
 
@@ -233,6 +234,10 @@ export const repo = {
 
   async deleteNote(id: string): Promise<void> {
     await db.notes.delete(id)
+  },
+
+  async setNotePinned(id: string, pinned: boolean): Promise<void> {
+    await db.notes.update(id, { pinned, updatedAt: now() })
   },
 
   // ── Body Weight ────────────────────────────────────────────────────────
