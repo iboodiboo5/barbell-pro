@@ -99,7 +99,9 @@ export function LiveWorkout() {
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 50,
+        // Above the TabBar (100) — a live session is full-screen and must not
+        // let the bar bury the summary's Done button; below sheets (200).
+        zIndex: 120,
         display: 'flex',
         flexDirection: 'column',
         background: 'var(--bg)',
