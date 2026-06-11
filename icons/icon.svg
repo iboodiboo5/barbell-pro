@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="46%" r="58%">
+      <stop offset="0%" stop-color="#0a84ff" stop-opacity="0.22"/>
+      <stop offset="55%" stop-color="#0a84ff" stop-opacity="0.07"/>
+      <stop offset="100%" stop-color="#0a84ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3f9fff"/>
+      <stop offset="100%" stop-color="#0a84ff"/>
+    </linearGradient>
+    <linearGradient id="plateBig" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#23232e"/>
+      <stop offset="100%" stop-color="#16161e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- rounded-square background -->
+  <rect width="512" height="512" rx="116" fill="#0a0a0f"/>
+  <rect width="512" height="512" rx="116" fill="url(#glow)"/>
+
+  <!-- barbell: shaft -->
+  <rect x="56" y="244" width="400" height="24" rx="12" fill="url(#bar)"/>
+
+  <!-- inner (big) plates -->
+  <rect x="128" y="168" width="44" height="176" rx="18" fill="url(#plateBig)" stroke="#2e2e3a" stroke-width="4"/>
+  <rect x="340" y="168" width="44" height="176" rx="18" fill="url(#plateBig)" stroke="#2e2e3a" stroke-width="4"/>
+
+  <!-- outer (small) plates -->
+  <rect x="88" y="198" width="34" height="116" rx="14" fill="url(#plateBig)" stroke="#2e2e3a" stroke-width="4"/>
+  <rect x="390" y="198" width="34" height="116" rx="14" fill="url(#plateBig)" stroke="#2e2e3a" stroke-width="4"/>
+
+  <!-- collars -->
+  <rect x="178" y="232" width="18" height="48" rx="8" fill="#3f9fff"/>
+  <rect x="316" y="232" width="18" height="48" rx="8" fill="#3f9fff"/>
+
+  <!-- subtle highlight on shaft -->
+  <rect x="206" y="248" width="100" height="6" rx="3" fill="#ffffff" opacity="0.35"/>
+</svg>
