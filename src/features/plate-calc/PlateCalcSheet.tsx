@@ -282,9 +282,11 @@ export function PlateCalcSheet() {
           </div>
         </div>
 
-        {/* palette — mixed-plate gyms: add kg and lb plates freely. Both unit
-            rows share one 7-column grid so kg and lb discs align column-for-
-            column (extra plates wrap onto further aligned grid rows). */}
+        {/* palette — mixed-plate gyms: add kg and lb plates freely. Uniform
+            neutral cards keep the grid calm; the plate color is just a small
+            tick under the value. Both unit rows share one 7-column grid so kg
+            and lb cards align column-for-column (extra plates wrap onto
+            further aligned grid rows). */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
           <span style={{ alignSelf: 'center', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-faint)' }}>
             ADD PLATES
@@ -297,31 +299,46 @@ export function PlateCalcSheet() {
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', paddingLeft: 2 }}>
                 {unit}
               </span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 7, justifyItems: 'center' }}>
-                {values.map((value) => (
-                  <PressScale
-                    key={value}
-                    onClick={() => addPlate({ value, unit })}
-                    aria-label={`Add one ${value} ${unit} plate per side`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 42,
-                      height: 42,
-                      borderRadius: '50%',
-                      background: 'var(--surface-2)',
-                      border: '2px solid',
-                      borderColor: plateColor(value, unit),
-                      fontSize: String(value).length > 3 ? 10 : 13,
-                      fontWeight: 700,
-                      fontVariantNumeric: 'tabular-nums',
-                      color: 'var(--text)',
-                    }}
-                  >
-                    {value}
-                  </PressScale>
-                ))}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+                {values.map((value) => {
+                  const tick = plateColor(value, unit)
+                  return (
+                    <PressScale
+                      key={value}
+                      onClick={() => addPlate({ value, unit })}
+                      aria-label={`Add one ${value} ${unit} plate per side`}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        width: '100%',
+                        height: 48,
+                        borderRadius: 12,
+                        background: 'var(--surface-2)',
+                        border: '1px solid var(--border-strong)',
+                        fontSize: String(value).length > 3 ? 12 : 13,
+                        fontWeight: 700,
+                        fontVariantNumeric: 'tabular-nums',
+                        color: 'var(--text)',
+                      }}
+                    >
+                      {value}
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: 16,
+                          height: 3,
+                          borderRadius: 2,
+                          background: tick,
+                          // keep the near-black 2.5 kg / 15 lb tick visible
+                          boxShadow: tick === 'var(--plate-2-5)' ? '0 0 0 1px var(--overlay-light)' : undefined,
+                        }}
+                      />
+                    </PressScale>
+                  )
+                })}
               </div>
             </div>
           ))}
