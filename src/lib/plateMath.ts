@@ -45,7 +45,7 @@ export interface PlateSel { value: number; unit: 'kg' | 'lb' }
 export const KG_PER_LB = 0.45359237
 
 /** Standard lb denominations for mixed-plate gyms. */
-export const LB_PLATES = [45, 35, 25, 10, 5, 2.5]
+export const LB_PLATES = [45, 35, 25, 15, 10, 5, 2.5]
 
 export const plateToKg = (p: PlateSel): number =>
   p.unit === 'lb' ? p.value * KG_PER_LB : p.value
