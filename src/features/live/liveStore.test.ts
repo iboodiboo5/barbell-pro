@@ -33,6 +33,17 @@ it('logSet writes a SetLog and flags PRs', async () => {
   expect(r2.isPR).toBe(false)
 })
 
+it('logSet reports exerciseDone when the planned sets are reached', async () => {
+  const { d } = await seedDay() // plannedSets: 3
+  await useLiveStore.getState().startSession(d.id)
+  const r1 = await useLiveStore.getState().logSet({ weight: 140, reps: 5 })
+  const r2 = await useLiveStore.getState().logSet({ weight: 140, reps: 5 })
+  expect(r1.exerciseDone).toBe(false)
+  expect(r2.exerciseDone).toBe(false)
+  const r3 = await useLiveStore.getState().logSet({ weight: 140, reps: 5 })
+  expect(r3.exerciseDone).toBe(true)
+})
+
 it('resumeIfActive restores an unfinished session', async () => {
   const { d } = await seedDay()
   await useLiveStore.getState().startSession(d.id)
