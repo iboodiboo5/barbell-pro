@@ -1,12 +1,15 @@
 import { animate, motion, Reorder, useDragControls, useMotionValue, useTransform } from 'motion/react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Exercise } from '../../data/db'
+import { repo } from '../../data/repo'
 import { formatWeight } from '../../lib/plateMath'
 import { useNavStore } from '../../navStore'
 import { haptics } from '../../ui/haptics'
+import { sound } from '../../ui/sound'
 import { PressScale } from '../../ui/PressScale'
 
 const SWIPE_REVEAL = 96 // px the row slides left to expose the delete button
+const COMPLETE_TRIGGER = 56 // px of right-swipe that logs one set on release
 
 interface ExerciseRowProps {
   exercise: Exercise
@@ -52,6 +55,17 @@ export function ExerciseRow({
   // peeks out from behind the row's rounded corners at rest.
   const x = useMotionValue(0)
   const deleteOpacity = useTransform(x, [-24, -4], [1, 0])
+  const completeOpacity = useTransform(x, [4, 24], [0, 1])
+
+  const quickLog = async () => {
+    if (completedCount >= exercise.plannedSets) {
+      haptics.warning()
+      return
+    }
+    await repo.logSetQuick(exercise)
+    haptics.success()
+    sound.complete()
+  }
 
   return (
     <Reorder.Item
@@ -104,15 +118,45 @@ export function ExerciseRow({
         </PressScale>
       </motion.div>
 
+      {/* Complete action revealed behind the row by swiping right. */}
+      <motion.div
+        aria-hidden="true"
+        style={{
+          opacity: completeOpacity,
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          paddingLeft: 22,
+          borderRadius: 14,
+          background: 'var(--success)',
+          color: 'var(--on-success)',
+          pointerEvents: 'none',
+        }}
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M4 12.5l5.5 5.5L20 7" />
+        </svg>
+      </motion.div>
+
       {/* Swipeable row surface. */}
       <motion.div
         drag="x"
-        dragConstraints={{ left: -SWIPE_REVEAL, right: 0 }}
-        dragElastic={{ left: 0.12, right: 0 }}
+        dragConstraints={{ left: -SWIPE_REVEAL, right: SWIPE_REVEAL }}
+        dragElastic={{ left: 0.12, right: 0.12 }}
         dragMomentum={false}
         animate={{ x: swipeOpen ? -SWIPE_REVEAL : 0 }}
         transition={{ type: 'spring', stiffness: 500, damping: 40 }}
         onDragEnd={(_, info) => {
+          // A right-swipe from rest marks one planned set done (capped at
+          // plannedSets inside quickLog). Right-drags that merely close an
+          // open delete swipe never log.
+          if (!swipeOpen && info.offset.x > COMPLETE_TRIGGER) {
+            animate(x, 0, { type: 'spring', stiffness: 500, damping: 40 })
+            void quickLog()
+            return
+          }
           const next = swipeOpen ? info.offset.x < SWIPE_REVEAL / 3 : info.offset.x < -SWIPE_REVEAL / 2
           if (next !== swipeOpen) haptics.light()
           // With dragMomentum={false} Motion leaves x wherever the finger let
