@@ -8,6 +8,8 @@ import { computePRs } from '../../lib/prMath'
 import { formatWeight } from '../../lib/plateMath'
 import { useNavStore } from '../../navStore'
 import { PressScale } from '../../ui/PressScale'
+import { haptics } from '../../ui/haptics'
+import { StatsContent } from '../stats/StatsTab'
 
 /** "today" / "yesterday" / "5d ago" / "3w ago" / "Jan 2026". */
 export function relativeDate(ts: number, now = Date.now()): string {
@@ -35,6 +37,7 @@ interface LiftRow {
 export function LiftsTab() {
   const openLift = useNavStore((s) => s.openLift)
   const [query, setQuery] = useState('')
+  const [view, setView] = useState<'lifts' | 'stats'>('lifts')
 
   const settings = useLiveQuery(() => repo.getSettings(), [])
   const units = settings?.units ?? 'kg'
@@ -77,10 +80,68 @@ export function LiftsTab() {
 
   return (
     <div style={{ paddingTop: 8 }}>
-      <header style={{ padding: '8px 20px 14px' }}>
-        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em' }}>Lifts</h1>
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 20px 14px',
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em' }}>
+          {view === 'lifts' ? 'Lifts' : 'Stats'}
+        </h1>
+        {/* Lifts | Stats segmented switch */}
+        <div
+          role="group"
+          aria-label="Lifts or stats view"
+          style={{
+            display: 'flex',
+            position: 'relative',
+            padding: 3,
+            borderRadius: 11,
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          {(['lifts', 'stats'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => {
+                if (v === view) return
+                haptics.light()
+                setView(v)
+              }}
+              aria-pressed={view === v}
+              style={{
+                position: 'relative',
+                padding: '5px 16px',
+                border: 'none',
+                background: 'none',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                color: view === v ? 'var(--text)' : 'var(--text-dim)',
+                cursor: 'pointer',
+              }}
+            >
+              {view === v && (
+                <motion.span
+                  layoutId="bp-lifts-view-pill"
+                  transition={{ type: 'spring', stiffness: 550, damping: 40 }}
+                  style={{ position: 'absolute', inset: 0, borderRadius: 8, background: 'var(--accent)' }}
+                />
+              )}
+              <span style={{ position: 'relative', textTransform: 'capitalize' }}>{v}</span>
+            </button>
+          ))}
+        </div>
       </header>
 
+      {view === 'stats' ? (
+        <StatsContent />
+      ) : (
+      <>
       <div style={{ padding: '0 20px 14px' }}>
         <input
           value={query}
@@ -174,6 +235,8 @@ export function LiftsTab() {
             </motion.div>
           ))}
         </motion.div>
+      )}
+      </>
       )}
     </div>
   )

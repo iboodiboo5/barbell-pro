@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { motion } from 'motion/react'
 import { useNavStore } from '../../navStore'
 import { repo } from '../../data/repo'
 import { DEFAULT_SETTINGS, type Settings } from '../../data/db'
@@ -17,13 +16,8 @@ import { BarGraphic, plateColor } from './BarGraphic'
 
 export const LAST_CALC_WEIGHT_KEY = 'bp_lastCalcWeight'
 
-const MIN_KG = 0
 const MAX_KG = 600
 const STEP_KG = 2.5
-
-function clampKg(v: number): number {
-  return Math.min(MAX_KG, Math.max(MIN_KG, Math.round(v * 100) / 100))
-}
 
 function StepButton({ sign, onClick }: { sign: '+' | '−'; onClick: () => void }) {
   return (
@@ -51,69 +45,70 @@ function StepButton({ sign, onClick }: { sign: '+' | '−'; onClick: () => void 
 }
 
 /**
- * Plate calculator bottom sheet. Internal state is ALWAYS kg — the kg/lbs
- * toggle only converts the readout. Opens via navStore.openPlateCalc(kg).
+ * Plate calculator bottom sheet. The per-side stack is the single source of
+ * truth: the big number always shows what's actually on the bar (kg internal,
+ * displayed in the settings units). + / − and typing re-auto-stack kg plates
+ * to the new number; palette taps edit the stack directly, mixing kg and lb.
  */
 export function PlateCalcSheet() {
   const plateCalcKg = useNavStore((s) => s.plateCalcKg)
   const closePlateCalc = useNavStore((s) => s.closePlateCalc)
   const open = plateCalcKg !== null
 
-  const [kg, setKg] = useState(60)
-  const [units, setUnits] = useState<'kg' | 'lbs'>('kg')
   const [settings, setSettings] = useState<Settings | null>(null)
   const [typing, setTyping] = useState(false)
   const [draft, setDraft] = useState('')
   const [seededDraft, setSeededDraft] = useState('')
 
-  // On open: seed the target and re-read settings (they change rarely).
+  // Re-read settings on every open (they change rarely).
   useEffect(() => {
     if (plateCalcKg === null) return
-    setKg(clampKg(plateCalcKg))
     setTyping(false)
-    void repo.getSettings().then((s) => {
-      setSettings(s)
-      setUnits(s.units)
-    })
+    void repo.getSettings().then(setSettings)
   }, [plateCalcKg])
 
-  // Remember the last target for the standalone (header-button) open.
-  useEffect(() => {
-    if (open) localStorage.setItem(LAST_CALC_WEIGHT_KEY, String(kg))
-  }, [open, kg])
-
+  const units = settings?.units ?? DEFAULT_SETTINGS.units
   const barWeightKg = settings?.barWeightKg ?? DEFAULT_SETTINGS.barWeightKg
   const platesKg = settings?.platesKg ?? DEFAULT_SETTINGS.platesKg
 
-  // Editable per-side stack. Target/settings changes reset it to the greedy kg
-  // suggestion; palette taps only touch the stack, so manual edits survive.
+  // Editable per-side stack — seeded from the opening weight, then only ever
+  // changed by the user (steppers, typing, palette taps).
   const [perSide, setPerSide] = useState<PlateSel[]>([])
   useEffect(() => {
-    if (!open) return
-    setPerSide(autoStack(kg, barWeightKg, platesKg))
+    if (plateCalcKg === null) return
+    setPerSide(autoStack(Math.min(MAX_KG, plateCalcKg), barWeightKg, platesKg))
     // `settings` stands in for barWeightKg/platesKg (loaded once per open)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, kg, settings])
+  }, [plateCalcKg, settings])
 
   const totalKg = stackTotalKg(barWeightKg, perSide)
-  const deltaKg = totalKg - kg
+
+  // Remember the last loaded weight for the standalone (header-button) open.
+  useEffect(() => {
+    if (open) localStorage.setItem(LAST_CALC_WEIGHT_KEY, String(totalKg))
+  }, [open, totalKg])
 
   // Display conversion only — math above stays kg.
-  const displayValue = Math.round((units === 'lbs' ? kgToLbs(kg) : kg) * 10) / 10
+  const displayValue = Math.round((units === 'lbs' ? kgToLbs(totalKg) : totalKg) * 10) / 10
   const decimals = Number.isInteger(displayValue) ? 0 : 1
+
+  const restackTo = (targetKg: number) => {
+    const clamped = Math.min(MAX_KG, Math.max(barWeightKg, Math.round(targetKg * 100) / 100))
+    setPerSide(autoStack(clamped, barWeightKg, platesKg))
+  }
 
   const step = (delta: number) => {
     sound.tick()
-    setKg((k) => clampKg(k + delta))
+    restackTo(totalKg + delta)
   }
 
-  const commitDraft = (withUnits: 'kg' | 'lbs') => {
+  const commitDraft = () => {
     // Skip commit when the user never changed the seeded value — avoids
     // lbs round-trip drift (e.g. "100" lbs → lbsToKg → 100.02 kg).
     if (draft !== seededDraft) {
       const v = parseFloat(draft.replace(',', '.'))
       if (Number.isFinite(v) && v >= 0) {
-        setKg(clampKg(withUnits === 'lbs' ? lbsToKg(v) : v))
+        restackTo(units === 'lbs' ? lbsToKg(v) : v)
       }
     }
     setTyping(false)
@@ -146,10 +141,6 @@ export function PlateCalcSheet() {
     setPerSide((s) => removePlate(s, plate))
   }
 
-  // Loaded total, display conversion only.
-  const totalDisplay = Math.round((units === 'lbs' ? kgToLbs(totalKg) : totalKg) * 10) / 10
-  const totalAlt = formatWeight(totalKg, units === 'kg' ? 'lbs' : 'kg')
-
   return (
     <Sheet
       open={open}
@@ -162,7 +153,7 @@ export function PlateCalcSheet() {
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, paddingBottom: 6 }}>
-        {/* − [readout] + */}
+        {/* − [loaded weight] + */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, width: '100%', marginTop: 2 }}>
           <StepButton sign="−" onClick={() => step(-STEP_KG)} />
           <div style={{ minWidth: 178, display: 'flex', justifyContent: 'center' }}>
@@ -172,12 +163,12 @@ export function PlateCalcSheet() {
                 inputMode="decimal"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                onBlur={() => commitDraft(units)}
+                onBlur={commitDraft}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitDraft(units)
+                  if (e.key === 'Enter') commitDraft()
                   if (e.key === 'Escape') setTyping(false)
                 }}
-                aria-label={`Target weight in ${units}`}
+                aria-label={`Weight in ${units}`}
                 style={{
                   width: 170,
                   background: 'transparent',
@@ -196,7 +187,7 @@ export function PlateCalcSheet() {
             ) : (
               <PressScale
                 onClick={beginTyping}
-                aria-label={`Target weight ${displayValue} ${units} — tap to type a value`}
+                aria-label={`Loaded weight ${displayValue} ${units} — tap to type a value`}
                 style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 6 }}
               >
                 <RollingNumber
@@ -210,91 +201,11 @@ export function PlateCalcSheet() {
           </div>
           <StepButton sign="+" onClick={() => step(STEP_KG)} />
         </div>
-
-        {/* kg / lbs display toggle (conversion only) */}
-        <div
-          role="group"
-          aria-label="Display units"
-          style={{
-            display: 'flex',
-            position: 'relative',
-            padding: 3,
-            borderRadius: 11,
-            background: 'var(--surface-2)',
-            border: '1px solid var(--border)',
-          }}
-        >
-          {(['kg', 'lbs'] as const).map((u) => (
-            <button
-              key={u}
-              onClick={() => {
-                if (u === units) return
-                haptics.light()
-                if (typing) commitDraft(units)
-                setUnits(u)
-              }}
-              aria-pressed={units === u}
-              style={{
-                position: 'relative',
-                padding: '5px 20px',
-                border: 'none',
-                background: 'none',
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 700,
-                color: units === u ? 'var(--text)' : 'var(--text-dim)',
-                cursor: 'pointer',
-              }}
-            >
-              {units === u && (
-                <motion.span
-                  layoutId="bp-plate-unit-pill"
-                  transition={{ type: 'spring', stiffness: 550, damping: 40 }}
-                  style={{ position: 'absolute', inset: 0, borderRadius: 8, background: 'var(--accent)' }}
-                />
-              )}
-              <span style={{ position: 'relative' }}>{u}</span>
-            </button>
-          ))}
-        </div>
         <span style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: -8 }}>
-          Tap the number to type · target auto-loads kg plates
+          Tap the number to type · tap plates below to load them
         </span>
 
         <BarGraphic perSide={perSide} barWeightKg={barWeightKg} />
-
-        {/* loaded total (the real number for mixed kg/lb stacks) */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, marginTop: -6 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-faint)' }}>
-            LOADED
-          </span>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-            <RollingNumber
-              value={totalDisplay}
-              decimals={Number.isInteger(totalDisplay) ? 0 : 1}
-              style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text)' }}
-            />
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-dim)' }}>{units}</span>
-            <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>= {totalAlt}</span>
-          </div>
-          {Math.abs(deltaKg) >= 0.05 && (
-            <span
-              role="status"
-              style={{
-                marginTop: 4,
-                padding: '3px 10px',
-                borderRadius: 999,
-                background: 'var(--surface-2)',
-                border: '1px solid var(--border-strong)',
-                color: 'var(--gold)',
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              {formatWeight(Math.abs(deltaKg), units)} {deltaKg < 0 ? 'short of' : 'over'} target
-            </span>
-          )}
-        </div>
 
         {/* per-side plate chips — tap to remove one */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
@@ -341,17 +252,15 @@ export function PlateCalcSheet() {
                 </PressScale>
               ))}
             </div>
-          ) : kg < barWeightKg ? (
-            <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-              Bar alone is {formatWeight(barWeightKg, units)} — above your target
-            </span>
           ) : (
-            <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>Empty bar — no plates loaded</span>
+            <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+              Empty bar — {formatWeight(barWeightKg, units)}
+            </span>
           )}
         </div>
 
         {/* palette — mixed-plate gyms: add kg and lb plates freely */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', alignItems: 'center' }}>
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-faint)' }}>
             ADD PLATES
           </span>
@@ -359,43 +268,37 @@ export function PlateCalcSheet() {
             { unit: 'kg' as const, values: platesKg },
             { unit: 'lb' as const, values: LB_PLATES },
           ]).map(({ unit, values }) => (
-            <div key={unit} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
-              <span style={{ width: 20, fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textAlign: 'right' }}>
+            <div key={unit} style={{ display: 'flex', alignItems: 'center', gap: 7, width: '100%', justifyContent: 'center' }}>
+              <span style={{ width: 18, fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textAlign: 'right', flexShrink: 0 }}>
                 {unit}
               </span>
-              {values.map((value) => (
-                <PressScale
-                  key={value}
-                  onClick={() => addPlate({ value, unit })}
-                  aria-label={`Add one ${value} ${unit} plate per side`}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '6px 10px',
-                    borderRadius: 10,
-                    background: 'var(--surface-2)',
-                    border: '1px solid var(--border-strong)',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    fontVariantNumeric: 'tabular-nums',
-                    color: 'var(--text)',
-                  }}
-                >
-                  <span
-                    aria-hidden="true"
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, justifyContent: 'flex-start' }}>
+                {values.map((value) => (
+                  <PressScale
+                    key={value}
+                    onClick={() => addPlate({ value, unit })}
+                    aria-label={`Add one ${value} ${unit} plate per side`}
                     style={{
-                      width: 8,
-                      height: 8,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 42,
+                      height: 42,
                       borderRadius: '50%',
-                      background: plateColor(value, unit),
-                      boxShadow: '0 0 0 1px var(--text-faint)',
+                      background: 'var(--surface-2)',
+                      border: '2px solid',
+                      borderColor: plateColor(value, unit),
+                      fontSize: String(value).length > 3 ? 10 : 13,
+                      fontWeight: 700,
+                      fontVariantNumeric: 'tabular-nums',
+                      color: 'var(--text)',
                       flexShrink: 0,
                     }}
-                  />
-                  {value}
-                </PressScale>
-              ))}
+                  >
+                    {value}
+                  </PressScale>
+                ))}
+              </div>
             </div>
           ))}
         </div>

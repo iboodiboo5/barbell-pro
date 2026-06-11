@@ -111,12 +111,24 @@ export function SetLogger({ exercise, active, isLast, onFinish }: SetLoggerProps
   const currentSet = Math.min(setCount + 1, exercise.plannedSets)
 
   const handleLog = async () => {
-    const { isPR } = await logSet({ weight, reps })
+    const { isPR, exerciseDone } = await logSet({ weight, reps })
     sound.complete()
     haptics.success()
     if (isPR) {
       sound.pr()
       setShowPR(true)
+    }
+    if (exerciseDone && !isLast) {
+      // Last planned set: auto-advance the pager once the completion feedback
+      // has landed — unless the user already swiped somewhere else.
+      const fromIndex = useLiveStore.getState().currentIndex
+      setTimeout(() => {
+        const store = useLiveStore.getState()
+        if (store.session && store.currentIndex === fromIndex) {
+          haptics.light()
+          store.setCurrentIndex(fromIndex + 1)
+        }
+      }, 900)
     }
   }
 

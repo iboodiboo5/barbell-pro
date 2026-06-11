@@ -36,7 +36,9 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-export function StatsTab() {
+/** Stats sections (consistency, volume, bodyweight, DOTS) — rendered inside
+ *  the Lifts tab's "Stats" view. */
+export function StatsContent() {
   const settings = useLiveQuery(() => repo.getSettings(), [])
 
   const logs = useLiveQuery(() => db.setLogs.toArray(), [])
@@ -71,12 +73,7 @@ export function StatsTab() {
     }))
 
   return (
-    <div style={{ paddingTop: 8 }}>
-      <header style={{ padding: '8px 20px 14px' }}>
-        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em' }}>Stats</h1>
-      </header>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '0 16px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '0 16px' }}>
         <Section title="Consistency">
           {sessionDates.length === 0 ? (
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-dim)' }}>
@@ -112,7 +109,6 @@ export function StatsTab() {
         <Section title="DOTS score">
           <DotsCard sex={settings.sex} units={units} />
         </Section>
-      </div>
     </div>
   )
 }

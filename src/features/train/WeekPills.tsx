@@ -34,6 +34,7 @@ function WeekPill({ week, active, armed, onTap, onArm, onConfirmRequest, onDupli
   return (
     <div
       data-armed-pill={armed ? 'true' : undefined}
+      data-active-pill={active ? 'true' : undefined}
       style={{
         position: 'relative',
         flexShrink: 0,
@@ -129,6 +130,19 @@ export function WeekPills({ weeks, selectedId, onSelect }: WeekPillsProps) {
   const [armedId, setArmedId] = useState<string | null>(null)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Keep the selected pill visible — without this the default (latest) week
+  // sits off-screen to the right once a program has more than a few weeks.
+  const firstScroll = useRef(true)
+  useEffect(() => {
+    const pill = scrollRef.current?.querySelector('[data-active-pill="true"]')
+    pill?.scrollIntoView({
+      behavior: firstScroll.current ? 'instant' : 'smooth',
+      inline: 'nearest',
+      block: 'nearest',
+    })
+    firstScroll.current = false
+  }, [selectedId])
 
   // Tapping anywhere outside the armed pill disarms it.
   useEffect(() => {

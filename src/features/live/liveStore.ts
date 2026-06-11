@@ -26,7 +26,7 @@ interface LiveState {
 
   startSession: (dayId: string) => Promise<void>
   resumeIfActive: () => Promise<boolean>
-  logSet: (args: { weight: number; reps: number; isWarmup?: boolean }) => Promise<{ isPR: boolean }>
+  logSet: (args: { weight: number; reps: number; isWarmup?: boolean }) => Promise<{ isPR: boolean; exerciseDone: boolean }>
   finishSession: () => Promise<SessionSummaryData>
   abandonSession: () => Promise<void>
   setCurrentIndex: (i: number) => void
@@ -178,12 +178,13 @@ export const useLiveStore = create<LiveState>((set, get) => ({
     await db.setLogs.add(log)
 
     const settings = await repo.getSettings()
+    const newCount = (setCounts[exercise.id] ?? 0) + 1
     set({
-      setCounts: { ...setCounts, [exercise.id]: (setCounts[exercise.id] ?? 0) + 1 },
+      setCounts: { ...setCounts, [exercise.id]: newCount },
       prSetIds: isPR ? [...prSetIds, log.id] : prSetIds,
       restEndsAt: Date.now() + settings.restDefaultSec * 1000,
     })
-    return { isPR }
+    return { isPR, exerciseDone: newCount >= exercise.plannedSets }
   },
 
   async finishSession() {
