@@ -62,6 +62,24 @@ describe('repo', () => {
     expect(await db.setLogs.count()).toBe(1)
   })
 
+  it('duplicateWeek copies loadText/repsText display values', async () => {
+    const w = await repo.addWeek('Week 1')
+    const d = await repo.addDay(w.id, 'Monday')
+    const ex = await repo.addExercise(d.id, { liftId: 'l1', plannedLoad: 13.6, plannedSets: 3, plannedReps: 10, remarks: [] })
+    await repo.updateExercise(ex.id, { loadText: '30lb', repsText: 'AMRAP' })
+    await repo.addExercise(d.id, { liftId: 'l2', plannedLoad: 100, plannedSets: 5, plannedReps: 5, remarks: [] })
+
+    const copy = await repo.duplicateWeek(w.id)
+    const copyDays = await db.days.where('weekId').equals(copy.id).toArray()
+    const copyExs = await db.exercises.where('dayId').equals(copyDays[0].id).toArray()
+    const textEx = copyExs.find((e) => e.liftId === 'l1')
+    expect(textEx?.loadText).toBe('30lb')
+    expect(textEx?.repsText).toBe('AMRAP')
+    // unset keys stay absent, not undefined-valued
+    const plainEx = copyExs.find((e) => e.liftId === 'l2')
+    expect(plainEx && 'loadText' in plainEx).toBe(false)
+  })
+
   it('getSettings returns defaults when unset and persists updates', async () => {
     const s = await repo.getSettings()
     expect(s.barWeightKg).toBe(20)
