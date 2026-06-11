@@ -3,7 +3,10 @@ import { motion } from 'motion/react'
 import { useNavStore } from '../../navStore'
 import { repo } from '../../data/repo'
 import { DEFAULT_SETTINGS, type Settings } from '../../data/db'
-import { computePlates, formatWeight, kgToLbs, lbsToKg } from '../../lib/plateMath'
+import {
+  autoStack, formatWeight, insertPlate, kgToLbs, LB_PLATES, lbsToKg,
+  removePlate, stackTotalKg, type PlateSel,
+} from '../../lib/plateMath'
 import { Sheet } from '../../ui/Sheet'
 import { Button } from '../../ui/Button'
 import { PressScale } from '../../ui/PressScale'
@@ -81,7 +84,19 @@ export function PlateCalcSheet() {
 
   const barWeightKg = settings?.barWeightKg ?? DEFAULT_SETTINGS.barWeightKg
   const platesKg = settings?.platesKg ?? DEFAULT_SETTINGS.platesKg
-  const { perSide, achieved, remainder } = computePlates(kg, barWeightKg, platesKg)
+
+  // Editable per-side stack. Target/settings changes reset it to the greedy kg
+  // suggestion; palette taps only touch the stack, so manual edits survive.
+  const [perSide, setPerSide] = useState<PlateSel[]>([])
+  useEffect(() => {
+    if (!open) return
+    setPerSide(autoStack(kg, barWeightKg, platesKg))
+    // `settings` stands in for barWeightKg/platesKg (loaded once per open)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, kg, settings])
+
+  const totalKg = stackTotalKg(barWeightKg, perSide)
+  const deltaKg = totalKg - kg
 
   // Display conversion only — math above stays kg.
   const displayValue = Math.round((units === 'lbs' ? kgToLbs(kg) : kg) * 10) / 10
@@ -111,13 +126,29 @@ export function PlateCalcSheet() {
     setTyping(true)
   }
 
-  // Group perSide (already heaviest-first) into denom × count chips.
-  const groups: Array<{ denom: number; count: number }> = []
+  // Group perSide (already heaviest-first) into denom+unit × count chips.
+  const groups: Array<{ plate: PlateSel; count: number }> = []
   for (const p of perSide) {
     const last = groups[groups.length - 1]
-    if (last && last.denom === p) last.count++
-    else groups.push({ denom: p, count: 1 })
+    if (last && last.plate.value === p.value && last.plate.unit === p.unit) last.count++
+    else groups.push({ plate: { ...p }, count: 1 })
   }
+
+  const addPlate = (plate: PlateSel) => {
+    haptics.light()
+    sound.tick()
+    setPerSide((s) => insertPlate(s, plate))
+  }
+
+  const dropPlate = (plate: PlateSel) => {
+    haptics.light()
+    sound.tick()
+    setPerSide((s) => removePlate(s, plate))
+  }
+
+  // Loaded total, display conversion only.
+  const totalDisplay = Math.round((units === 'lbs' ? kgToLbs(totalKg) : totalKg) * 10) / 10
+  const totalAlt = formatWeight(totalKg, units === 'kg' ? 'lbs' : 'kg')
 
   return (
     <Sheet
@@ -227,87 +258,147 @@ export function PlateCalcSheet() {
           ))}
         </div>
         <span style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: -8 }}>
-          Tap the number to type · plates are kg
+          Tap the number to type · target auto-loads kg plates
         </span>
 
         <BarGraphic perSide={perSide} barWeightKg={barWeightKg} />
 
-        {/* per-side plate chips */}
+        {/* loaded total (the real number for mixed kg/lb stacks) */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, marginTop: -6 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-faint)' }}>
+            LOADED
+          </span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <RollingNumber
+              value={totalDisplay}
+              decimals={Number.isInteger(totalDisplay) ? 0 : 1}
+              style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text)' }}
+            />
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-dim)' }}>{units}</span>
+            <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>= {totalAlt}</span>
+          </div>
+          {Math.abs(deltaKg) >= 0.05 && (
+            <span
+              role="status"
+              style={{
+                marginTop: 4,
+                padding: '3px 10px',
+                borderRadius: 999,
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border-strong)',
+                color: 'var(--gold)',
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              {formatWeight(Math.abs(deltaKg), units)} {deltaKg < 0 ? 'short of' : 'over'} target
+            </span>
+          )}
+        </div>
+
+        {/* per-side plate chips — tap to remove one */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-faint)' }}>
-            PER SIDE
+            PER SIDE · TAP TO REMOVE
           </span>
           {groups.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-                {groups.map((g) => (
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+              {groups.map((g) => (
+                <PressScale
+                  key={`${g.plate.value}-${g.plate.unit}`}
+                  onClick={() => dropPlate(g.plate)}
+                  aria-label={`Remove one ${g.plate.value} ${g.plate.unit} plate per side`}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    padding: '6px 12px',
+                    borderRadius: 999,
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--border)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    fontVariantNumeric: 'tabular-nums',
+                    color: 'var(--text)',
+                  }}
+                >
                   <span
-                    key={g.denom}
+                    aria-hidden="true"
                     style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 7,
-                      padding: '4px 11px',
-                      borderRadius: 999,
-                      background: 'var(--surface-2)',
-                      border: '1px solid var(--border)',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      fontVariantNumeric: 'tabular-nums',
-                      color: 'var(--text)',
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: plateColor(g.plate.value, g.plate.unit),
+                      // text-faint ring keeps the dark 2.5 kg dot visible
+                      boxShadow: '0 0 0 1px var(--text-faint)',
+                      flexShrink: 0,
                     }}
-                  >
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: plateColor(g.denom),
-                        // text-faint ring keeps the dark 2.5 kg dot visible
-                        boxShadow: '0 0 0 1px var(--text-faint)',
-                        flexShrink: 0,
-                      }}
-                    />
-                    {g.denom} ×{g.count}
-                  </span>
-                ))}
-              </div>
+                  />
+                  {g.plate.value} {g.plate.unit} ×{g.count}
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                    <path d="M5 12h14" />
+                  </svg>
+                </PressScale>
+              ))}
             </div>
           ) : kg < barWeightKg ? (
             <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
               Bar alone is {formatWeight(barWeightKg, units)} — above your target
             </span>
           ) : (
-            <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>Empty bar — no plates needed</span>
+            <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>Empty bar — no plates loaded</span>
           )}
         </div>
 
-        {/* remainder warning when the target isn't exactly loadable.
-            Threshold 0.05 kg avoids "0 lbs short" noise from display rounding. */}
-        {remainder >= 0.05 && (
-          <div
-            role="status"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 14px',
-              borderRadius: 10,
-              background: 'var(--surface-2)',
-              border: '1px solid var(--border-strong)',
-              color: 'var(--gold)',
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <path d="M12 9v4M12 17h.01" />
-            </svg>
-            {formatWeight(remainder, units)} short — closest loadable: {formatWeight(achieved, units)}
-          </div>
-        )}
+        {/* palette — mixed-plate gyms: add kg and lb plates freely */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', alignItems: 'center' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-faint)' }}>
+            ADD PLATES
+          </span>
+          {([
+            { unit: 'kg' as const, values: platesKg },
+            { unit: 'lb' as const, values: LB_PLATES },
+          ]).map(({ unit, values }) => (
+            <div key={unit} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <span style={{ width: 20, fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textAlign: 'right' }}>
+                {unit}
+              </span>
+              {values.map((value) => (
+                <PressScale
+                  key={value}
+                  onClick={() => addPlate({ value, unit })}
+                  aria-label={`Add one ${value} ${unit} plate per side`}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 10px',
+                    borderRadius: 10,
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--border-strong)',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    fontVariantNumeric: 'tabular-nums',
+                    color: 'var(--text)',
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: plateColor(value, unit),
+                      boxShadow: '0 0 0 1px var(--text-faint)',
+                      flexShrink: 0,
+                    }}
+                  />
+                  {value}
+                </PressScale>
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
     </Sheet>
   )
