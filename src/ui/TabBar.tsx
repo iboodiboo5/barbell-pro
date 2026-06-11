@@ -4,43 +4,38 @@ import { useNavStore, type Tab } from '../navStore'
 interface TabConfig {
   id: Tab
   label: string
+  /** The hero tab — rendered as a raised accent circle in the middle. */
+  center?: boolean
   icon: React.ReactNode
 }
 
 const tabs: TabConfig[] = [
   {
-    id: 'train',
-    label: 'Train',
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <rect x="3" y="3" width="7" height="7" rx="1" />
-        <rect x="14" y="3" width="7" height="7" rx="1" />
-        <rect x="3" y="14" width="7" height="7" rx="1" />
-        <rect x="14" y="14" width="7" height="7" rx="1" />
-      </svg>
-    ),
-  },
-  {
     id: 'lifts',
     label: 'Lifts',
+    // dumbbell
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M6 5v14" />
-        <path d="M18 5v14" />
-        <path d="M3 8h3" />
-        <path d="M18 8h3" />
-        <path d="M3 16h3" />
-        <path d="M18 16h3" />
-        <path d="M6 12h12" />
+        <path d="M9.5 12h5" />
+        <path d="M7 7.5v9" />
+        <path d="M4 9.5v5" />
+        <path d="M17 7.5v9" />
+        <path d="M20 9.5v5" />
       </svg>
     ),
   },
   {
-    id: 'stats',
-    label: 'Stats',
+    id: 'train',
+    label: 'Train',
+    center: true,
+    // barbell with plates
     icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M7.5 12h9" />
+        <path d="M5.5 7v10" />
+        <path d="M2.5 9v6" />
+        <path d="M18.5 7v10" />
+        <path d="M21.5 9v6" />
       </svg>
     ),
   },
@@ -79,6 +74,64 @@ export function TabBar() {
     >
       {tabs.map((t) => {
         const active = tab === t.id
+
+        if (t.center) {
+          // Hero tab: raised accent circle that floats above the bar.
+          return (
+            <button
+              key={t.id}
+              aria-label={t.label}
+              aria-current={active ? 'page' : undefined}
+              onClick={() => setTab(t.id)}
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'flex-start',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                position: 'relative',
+                padding: 0,
+              }}
+            >
+              <motion.span
+                initial={false}
+                animate={{ scale: active ? 1 : 0.92, y: -14 }}
+                whileTap={{ scale: 0.85 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 56,
+                  height: 56,
+                  borderRadius: '50%',
+                  background: 'var(--accent)',
+                  color: 'var(--text)',
+                  border: '4px solid var(--bg)',
+                  boxShadow: active
+                    ? '0 8px 24px var(--accent-soft)'
+                    : '0 4px 14px rgba(0, 0, 0, .4)',
+                }}
+              >
+                {t.icon}
+              </motion.span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: active ? 600 : 400,
+                  color: active ? 'var(--accent)' : 'var(--text-faint)',
+                  marginTop: -8,
+                }}
+              >
+                {t.label}
+              </span>
+            </button>
+          )
+        }
+
         return (
           <button
             key={t.id}

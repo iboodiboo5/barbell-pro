@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type Tab = 'train' | 'lifts' | 'stats' | 'notes'
+export type Tab = 'train' | 'lifts' | 'notes'
 
 interface NavState {
   tab: Tab

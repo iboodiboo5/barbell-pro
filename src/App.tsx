@@ -9,7 +9,6 @@ import { LiveWorkout } from './features/live/LiveWorkout'
 import { useLiveStore } from './features/live/liveStore'
 import { LiftsTab } from './features/lifts/LiftsTab'
 import { LiftDetail } from './features/lifts/LiftDetail'
-import { StatsTab } from './features/stats/StatsTab'
 import { NotesTab } from './features/notes/NotesTab'
 import { ToastHost } from './ui/Toast'
 
@@ -41,7 +40,6 @@ function TabContent() {
       >
         {tab === 'train' && <TrainTab />}
         {tab === 'lifts' && <LiftsTab />}
-        {tab === 'stats' && <StatsTab />}
         {tab === 'notes' && <NotesTab />}
       </motion.div>
     </AnimatePresence>
