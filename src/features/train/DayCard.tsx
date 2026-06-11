@@ -56,6 +56,7 @@ export function DayCard({ day, isToday, isStartable, units, swipeOpenId, onSwipe
   const [armedDelete, setArmedDelete] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [confirmingExercise, setConfirmingExercise] = useState<Exercise | null>(null)
+  const [confirmingStart, setConfirmingStart] = useState(false)
 
   const headerLongPress = useLongPress(() => {
     haptics.warning()
@@ -93,9 +94,10 @@ export function DayCard({ day, isToday, isStartable, units, swipeOpenId, onSwipe
       <div
         {...headerLongPress}
         data-armed-day={armedDelete ? day.id : undefined}
-        onClick={armedDelete ? () => setConfirmingDelete(true) : undefined}
-        role={armedDelete ? 'button' : undefined}
-        aria-label={armedDelete ? `Delete ${day.name}` : undefined}
+        // armed → confirm delete; plain tap → confirm starting this day's workout
+        onClick={armedDelete ? () => setConfirmingDelete(true) : () => setConfirmingStart(true)}
+        role="button"
+        aria-label={armedDelete ? `Delete ${day.name}` : `Start ${day.name} workout`}
         style={{
           display: 'flex',
           alignItems: 'baseline',
@@ -103,7 +105,7 @@ export function DayCard({ day, isToday, isStartable, units, swipeOpenId, onSwipe
           gap: 12,
           marginBottom: items.length > 0 ? 14 : 10,
           WebkitTouchCallout: 'none',
-          cursor: armedDelete ? 'pointer' : 'default',
+          cursor: 'pointer',
         }}
       >
         <span
@@ -244,6 +246,24 @@ export function DayCard({ day, isToday, isStartable, units, swipeOpenId, onSwipe
           }
         }}
         onClose={() => setConfirmingExercise(null)}
+      />
+
+      <ConfirmSheet
+        open={confirmingStart}
+        title={`Start ${day.name}?`}
+        message={
+          day.date
+            ? `Jump straight into ${day.name} — ${formatDate(day.date)}.`
+            : `Jump straight into ${day.name}.`
+        }
+        confirmLabel="Start workout"
+        variant="primary"
+        onConfirm={() => {
+          setConfirmingStart(false)
+          haptics.medium()
+          startLive(day.id)
+        }}
+        onClose={() => setConfirmingStart(false)}
       />
 
       <ConfirmSheet
