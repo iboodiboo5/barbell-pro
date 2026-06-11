@@ -314,8 +314,35 @@ export function GraphCard({
         )}
       </div>
 
-      {/* header stat + range row */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10, margin: '12px 2px 10px', minHeight: 44 }}>
+      {/* range row — its own line so the header stat never gets squeezed */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2, margin: '10px 2px 2px' }}>
+        {RANGES.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => {
+              if (r.id === range) return
+              haptics.light()
+              setRange(r.id)
+            }}
+            aria-pressed={range === r.id}
+            style={{
+              padding: '4px 9px',
+              borderRadius: 999,
+              border: range === r.id ? '1px solid var(--border-strong)' : '1px solid transparent',
+              background: range === r.id ? 'var(--surface-2)' : 'none',
+              fontSize: 11,
+              fontWeight: 700,
+              color: range === r.id ? 'var(--text)' : 'var(--text-faint)',
+              cursor: 'pointer',
+            }}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      {/* header stat row */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10, margin: '0 2px 10px', minHeight: 40 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
           {active === 'dots' && dotsCaption ? (
             <>
@@ -328,7 +355,7 @@ export function GraphCard({
             </>
           ) : active === 'bodyweight' ? (
             <>
-              <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.1 }}>
+              <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
                 {latestBw ? formatWeight(latestBw.weightKg, units) : '—'}
               </span>
               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)' }}>
@@ -339,7 +366,7 @@ export function GraphCard({
             </>
           ) : active === 'weeklyVolume' && latestGlobal ? (
             <>
-              <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.1 }}>
+              <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
                 {fmtVolume(latestGlobal.y)} {units}
               </span>
               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)' }}>{latestGlobal.label}</span>
@@ -351,38 +378,11 @@ export function GraphCard({
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          {active === 'bodyweight' && (
-            <Button variant="ghost" onClick={() => setLogOpen(true)} style={{ minHeight: 34, padding: '0 12px', fontSize: 13 }}>
-              Log weight
-            </Button>
-          )}
-          <div style={{ display: 'flex', gap: 2 }}>
-            {RANGES.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => {
-                  if (r.id === range) return
-                  haptics.light()
-                  setRange(r.id)
-                }}
-                aria-pressed={range === r.id}
-                style={{
-                  padding: '4px 9px',
-                  borderRadius: 999,
-                  border: range === r.id ? '1px solid var(--border-strong)' : '1px solid transparent',
-                  background: range === r.id ? 'var(--surface-2)' : 'none',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: range === r.id ? 'var(--text)' : 'var(--text-faint)',
-                  cursor: 'pointer',
-                }}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        {active === 'bodyweight' && (
+          <Button variant="ghost" onClick={() => setLogOpen(true)} style={{ minHeight: 34, padding: '0 12px', fontSize: 13, flexShrink: 0 }}>
+            Log weight
+          </Button>
+        )}
       </div>
 
       {/* chart */}
