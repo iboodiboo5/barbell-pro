@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AnimatePresence, animate, motion, useMotionValue } from 'motion/react'
+import { AnimatePresence, animate, motion, useMotionValue, useTransform } from 'motion/react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../data/db'
 import type { Note } from '../../data/db'
@@ -8,13 +8,136 @@ import { Sheet } from '../../ui/Sheet'
 import { Button } from '../../ui/Button'
 import { PressScale } from '../../ui/PressScale'
 import { haptics } from '../../ui/haptics'
-import { sound } from '../../ui/sound'
 import { relativeDate } from '../lifts/LiftsTab'
 
 const SWIPE_REVEAL = 96
 const UNDO_MS = 4000
+const AUTOSAVE_MS = 500
 
 const SETTLE = { type: 'spring', stiffness: 500, damping: 40 } as const
+
+/**
+ * Always-present inline composer: the "empty note" at the top of the list.
+ * First keystroke creates the note; edits autosave (debounced); leaving the
+ * field with content finalizes it into the list below; leaving it empty
+ * deletes the draft. No + button, no sheet.
+ */
+function NoteComposer({ onComposingChange }: { onComposingChange: (id: string | null) => void }) {
+  const [text, setText] = useState('')
+  const textRef = useRef('')
+  const idRef = useRef<string | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Serializes create/update/delete so a finalize can't race an in-flight create.
+  const queueRef = useRef<Promise<void>>(Promise.resolve())
+  const taRef = useRef<HTMLTextAreaElement>(null)
+
+  const enqueue = (fn: () => Promise<void>) => {
+    queueRef.current = queueRef.current.then(fn, fn)
+  }
+
+  const persist = (value: string) => {
+    enqueue(async () => {
+      if (value.trim() === '' && !idRef.current) return
+      if (!idRef.current) {
+        const note = await repo.addNote(value)
+        idRef.current = note.id
+        onComposingChange(note.id)
+      } else {
+        await repo.updateNote(idRef.current, value)
+      }
+    })
+  }
+
+  const onChange = (value: string) => {
+    setText(value)
+    textRef.current = value
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => persist(textRef.current), AUTOSAVE_MS)
+  }
+
+  const finalize = () => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    const value = textRef.current
+    enqueue(async () => {
+      if (value.trim() === '') {
+        if (idRef.current) await repo.deleteNote(idRef.current)
+      } else if (!idRef.current) {
+        const note = await repo.addNote(value)
+        idRef.current = note.id
+      } else {
+        await repo.updateNote(idRef.current, value)
+      }
+      idRef.current = null
+    })
+    if (value.trim() !== '') haptics.light()
+    setText('')
+    textRef.current = ''
+    onComposingChange(null)
+  }
+
+  // Flush a pending draft when the tab unmounts mid-typing.
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    const value = textRef.current
+    const id = idRef.current
+    if (value.trim() !== '') {
+      queueRef.current = queueRef.current.then(async () => {
+        if (id) await repo.updateNote(id, value)
+        else await repo.addNote(value)
+      })
+    } else if (id) {
+      queueRef.current = queueRef.current.then(() => repo.deleteNote(id))
+    }
+  }, [])
+
+  // Auto-grow with the content.
+  useEffect(() => {
+    const el = taRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [text])
+
+  return (
+    <div
+      style={{
+        background: 'var(--surface)',
+        border: '1px dashed var(--border-strong)',
+        borderRadius: 'var(--radius-card)',
+        padding: '12px 16px',
+      }}
+    >
+      <textarea
+        ref={taRef}
+        value={text}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={finalize}
+        placeholder="Jot something — cues, ideas, gym thoughts…"
+        aria-label="New note"
+        rows={2}
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          resize: 'none',
+          overflow: 'hidden',
+          padding: 0,
+          border: 'none',
+          background: 'transparent',
+          color: 'var(--text)',
+          fontSize: 15,
+          lineHeight: 1.45,
+          fontFamily: 'inherit',
+          outline: 'none',
+          userSelect: 'text',
+          WebkitUserSelect: 'text',
+        }}
+      />
+      <div style={{ marginTop: 4, fontSize: 11, fontWeight: 600, color: 'var(--text-faint)' }}>
+        {text.trim() === '' ? 'Autosaves as you type' : 'Saved — tap outside to file it'}
+      </div>
+    </div>
+  )
+}
 
 function NoteRow({
   note,
@@ -30,6 +153,9 @@ function NoteRow({
   onDelete: () => void
 }) {
   const x = useMotionValue(0)
+  // Tie the delete layer's visibility to the actual swipe offset so it never
+  // peeks out from behind the card's rounded corners at rest.
+  const deleteOpacity = useTransform(x, [-24, -4], [1, 0])
 
   return (
     <motion.div
@@ -41,13 +167,16 @@ function NoteRow({
       style={{ position: 'relative' }}
     >
       {/* delete affordance behind the card */}
-      <div
+      <motion.div
+        aria-hidden={!swipeOpen}
         style={{
+          opacity: deleteOpacity,
           position: 'absolute',
           inset: 0,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'flex-end',
+          pointerEvents: swipeOpen ? 'auto' : 'none',
         }}
       >
         <PressScale
@@ -69,7 +198,7 @@ function NoteRow({
         >
           Delete
         </PressScale>
-      </div>
+      </motion.div>
 
       <motion.div
         drag="x"
@@ -138,6 +267,8 @@ export function NotesTab() {
   const [editing, setEditing] = useState<Note | null>(null)
   const [draft, setDraft] = useState('')
   const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null)
+  // The composer's in-flight note id — hidden from the list while typing.
+  const [composingId, setComposingId] = useState<string | null>(null)
 
   // Undo state: the deleted note is kept in memory for a few seconds.
   const [undoNote, setUndoNote] = useState<Note | null>(null)
@@ -155,12 +286,6 @@ export function NotesTab() {
     }
   }, [sheetOpen])
 
-  const openNew = () => {
-    setEditing(null)
-    setDraft('')
-    setSheetOpen(true)
-  }
-
   const openEdit = (note: Note) => {
     setEditing(note)
     setDraft(note.text)
@@ -169,14 +294,10 @@ export function NotesTab() {
 
   const save = async () => {
     const text = draft.trim()
-    if (text === '') {
-      setSheetOpen(false)
-      return
+    if (text !== '' && editing) {
+      await repo.updateNote(editing.id, text)
+      haptics.success()
     }
-    if (editing) await repo.updateNote(editing.id, text)
-    else await repo.addNote(text)
-    haptics.success()
-    sound.complete()
     setSheetOpen(false)
   }
 
@@ -198,76 +319,29 @@ export function NotesTab() {
     haptics.light()
   }
 
+  const visibleNotes = (notes ?? []).filter((n) => n.id !== composingId)
+
   return (
     <div style={{ paddingTop: 8 }}>
       <header style={{ padding: '8px 20px 14px' }}>
         <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em' }}>Notes</h1>
       </header>
 
-      {notes && notes.length === 0 ? (
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 10,
-            padding: '64px 32px',
-            textAlign: 'center',
-          }}
-        >
-          <svg width="120" height="84" viewBox="0 0 120 84" fill="none" aria-hidden="true">
-            <rect x="22" y="8" width="76" height="68" rx="10" fill="var(--surface)" stroke="var(--border-strong)" />
-            <path d="M34 26h52M34 38h52M34 50h36" stroke="var(--border-strong)" strokeWidth="3" strokeLinecap="round" />
-            <path d="M88 56l14-14 6 6-14 14-7.5 1.5L88 56z" fill="var(--accent)" opacity="0.85" />
-          </svg>
-          <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>No notes yet</div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-dim)' }}>
-            Cues, programming ideas, gym thoughts — jot them here.
-          </div>
-        </motion.div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px' }}>
-          <AnimatePresence initial={false}>
-            {(notes ?? []).map((n) => (
-              <NoteRow
-                key={n.id}
-                note={n}
-                swipeOpen={swipeOpenId === n.id}
-                onSwipe={(open) => setSwipeOpenId(open ? n.id : null)}
-                onEdit={() => openEdit(n)}
-                onDelete={() => void deleteWithUndo(n)}
-              />
-            ))}
-          </AnimatePresence>
-        </div>
-      )}
-
-      {/* FAB */}
-      <PressScale
-        onClick={openNew}
-        aria-label="Add note"
-        style={{
-          position: 'fixed',
-          right: 20,
-          bottom: 'calc(84px + var(--safe-bottom))',
-          zIndex: 40,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 56,
-          height: 56,
-          borderRadius: '50%',
-          background: 'var(--accent)',
-          boxShadow: '0 8px 24px var(--accent-soft)',
-        }}
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      </PressScale>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px' }}>
+        <NoteComposer onComposingChange={setComposingId} />
+        <AnimatePresence initial={false}>
+          {visibleNotes.map((n) => (
+            <NoteRow
+              key={n.id}
+              note={n}
+              swipeOpen={swipeOpenId === n.id}
+              onSwipe={(open) => setSwipeOpenId(open ? n.id : null)}
+              onEdit={() => openEdit(n)}
+              onDelete={() => void deleteWithUndo(n)}
+            />
+          ))}
+        </AnimatePresence>
+      </div>
 
       {/* undo pill */}
       <AnimatePresence>
@@ -316,7 +390,7 @@ export function NotesTab() {
       <Sheet
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
-        title={editing ? 'Edit note' : 'New note'}
+        title="Edit note"
         footer={
           <Button fullWidth onClick={() => void save()}>
             Save
