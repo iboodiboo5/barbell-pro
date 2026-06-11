@@ -133,6 +133,26 @@ describe('repo', () => {
     expect(b1Updated?.order).toBe(b1OriginalOrder)
   })
 
+  it('logSetQuick logs one planned set against the exercise', async () => {
+    const w = await repo.addWeek('W')
+    const d = await repo.addDay(w.id, 'Push')
+    const ex = await repo.addExercise(d.id, { liftId: 'l1', plannedLoad: 27.5, plannedSets: 3, plannedReps: 10, remarks: [] })
+
+    const log = await repo.logSetQuick(ex)
+
+    expect(await db.setLogs.count()).toBe(1)
+    const stored = await db.setLogs.get(log.id)
+    expect(stored).toMatchObject({
+      exerciseId: ex.id,
+      liftId: 'l1',
+      dayId: d.id,
+      weight: 27.5,
+      reps: 10,
+      isWarmup: false,
+    })
+    expect(stored!.completedAt).toBeGreaterThan(0)
+  })
+
   it('deleteExercise cascades its setLogs but leaves sibling exercises', async () => {
     const w = await repo.addWeek('W')
     const d = await repo.addDay(w.id, 'Push')

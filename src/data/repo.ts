@@ -1,5 +1,5 @@
 import { db, DEFAULT_SETTINGS } from './db'
-import type { Week, Day, Exercise, Note, BodyWeightEntry, Settings } from './db'
+import type { Week, Day, Exercise, Note, BodyWeightEntry, Settings, SetLog } from './db'
 
 type ExercisePatch = Partial<Pick<Exercise, 'liftId' | 'plannedLoad' | 'plannedSets' | 'plannedReps' | 'loadText' | 'repsText' | 'remarks'>>
 
@@ -176,6 +176,25 @@ export const repo = {
         }
       }
     })
+  },
+
+  // ── Set logs ───────────────────────────────────────────────────────────
+
+  /** Quick-log one planned set outside a live session (swipe-to-complete). */
+  async logSetQuick(exercise: Exercise): Promise<SetLog> {
+    const log: SetLog = {
+      id: uuid(),
+      exerciseId: exercise.id,
+      liftId: exercise.liftId,
+      dayId: exercise.dayId,
+      weight: exercise.plannedLoad,
+      reps: exercise.plannedReps,
+      completedAt: now(),
+      isWarmup: false,
+      updatedAt: now(),
+    }
+    await db.setLogs.add(log)
+    return log
   },
 
   // ── Settings ───────────────────────────────────────────────────────────
