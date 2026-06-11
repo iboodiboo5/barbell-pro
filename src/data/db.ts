@@ -14,7 +14,7 @@ export interface SetLog {
   weight: number; reps: number; completedAt: number; isWarmup: boolean; updatedAt: number
 }
 export interface Lift { id: string; name: string; aliases: string[]; updatedAt: number }
-export interface Note { id: string; text: string; createdAt: number; updatedAt: number }
+export interface Note { id: string; text: string; pinned?: boolean; createdAt: number; updatedAt: number }
 export interface BodyWeightEntry { id: string; weightKg: number; date: string; updatedAt: number }
 export interface Settings {
   id: 'app'
@@ -27,6 +27,8 @@ export interface Settings {
   restDefaultSec: number
   consistencyTargetPerWeek: number
   consistencyStartDate: string  // ISO date
+  /** Profile graph cards: two arrays of metric ids (see features/stats/metrics). */
+  statCards: string[][]
   updatedAt: number
 }
 export interface LiveSession {
@@ -40,6 +42,12 @@ export const DEFAULT_SETTINGS: Settings = {
   sound: true, haptics: true, restDefaultSec: 150,
   consistencyTargetPerWeek: 4,
   consistencyStartDate: new Date().toISOString().slice(0, 10),
+  // mirrors DEFAULT_STAT_CARDS in features/stats/metrics.ts (data layer can't
+  // import UI features); sanitizeStatCards() reconciles at point of use
+  statCards: [
+    ['est1rm', 'maxWeight', 'maxReps', 'liftVolume'],
+    ['bodyweight', 'dots', 'weeklyVolume'],
+  ],
   updatedAt: 0,
 }
 

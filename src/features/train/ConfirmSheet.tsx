@@ -6,16 +6,19 @@ interface ConfirmSheetProps {
   title: string
   message: string
   confirmLabel: string
+  /** danger (default) for destructive confirms, primary for accent ones. */
+  variant?: 'danger' | 'primary'
   onConfirm: () => void
   onClose: () => void
 }
 
-/** Small destructive-action confirmation sheet: message + danger CTA + cancel. */
+/** Small confirmation sheet: message + CTA + cancel. */
 export function ConfirmSheet({
   open,
   title,
   message,
   confirmLabel,
+  variant = 'danger',
   onConfirm,
   onClose,
 }: ConfirmSheetProps) {
@@ -26,7 +29,7 @@ export function ConfirmSheet({
       title={title}
       footer={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Button variant="danger" fullWidth onClick={onConfirm}>
+          <Button variant={variant === 'danger' ? 'danger' : undefined} fullWidth onClick={onConfirm}>
             {confirmLabel}
           </Button>
           <Button variant="ghost" fullWidth onClick={onClose} style={{ color: 'var(--text-dim)' }}>

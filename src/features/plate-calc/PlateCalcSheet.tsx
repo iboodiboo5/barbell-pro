@@ -142,6 +142,12 @@ export function PlateCalcSheet() {
     setPerSide((s) => removePlate(s, plate))
   }
 
+  const clearBar = () => {
+    haptics.warning()
+    sound.tick()
+    setPerSide([])
+  }
+
   return (
     <Sheet
       open={open}
@@ -211,9 +217,37 @@ export function PlateCalcSheet() {
         {/* on-the-bar rail — fixed height + single line so adding/removing
             plates never shifts the palette and Done button below it */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, width: '100%' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-faint)' }}>
-            ON THE BAR · TAP TO REMOVE
-          </span>
+          {/* 3-col grid keeps the label dead-center; Clear fades via opacity so
+              the row never shifts (fixed-geometry rule) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', width: '100%' }}>
+            <span aria-hidden="true" />
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-faint)' }}>
+              ON THE BAR · TAP TO REMOVE
+            </span>
+            <button
+              onClick={clearBar}
+              disabled={perSide.length === 0}
+              aria-label="Remove all plates"
+              aria-hidden={perSide.length === 0}
+              tabIndex={perSide.length === 0 ? -1 : 0}
+              style={{
+                justifySelf: 'end',
+                padding: '2px 4px',
+                border: 'none',
+                background: 'none',
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                color: 'var(--danger)',
+                cursor: perSide.length === 0 ? 'default' : 'pointer',
+                opacity: perSide.length === 0 ? 0 : 0.85,
+                pointerEvents: perSide.length === 0 ? 'none' : 'auto',
+                transition: 'opacity .18s',
+              }}
+            >
+              CLEAR
+            </button>
+          </div>
           <div
             className="no-scrollbar"
             style={{ width: '100%', height: 38, overflowX: 'auto', overflowY: 'hidden' }}

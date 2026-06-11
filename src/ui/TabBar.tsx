@@ -11,16 +11,13 @@ interface TabConfig {
 
 const tabs: TabConfig[] = [
   {
-    id: 'lifts',
-    label: 'Lifts',
-    // dumbbell
+    id: 'profile',
+    label: 'Profile',
+    // person
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M9.5 12h5" />
-        <path d="M7 7.5v9" />
-        <path d="M4 9.5v5" />
-        <path d="M17 7.5v9" />
-        <path d="M20 9.5v5" />
+        <circle cx="12" cy="8" r="4" />
+        <path d="M5 20.5c.8-3.4 3.6-5.5 7-5.5s6.2 2.1 7 5.5" />
       </svg>
     ),
   },

@@ -87,6 +87,26 @@ describe('repo', () => {
     expect((await repo.getSettings()).units).toBe('lbs')
   })
 
+  it('statCards default to two cards and persist a custom layout (deep copy)', async () => {
+    const s = await repo.getSettings()
+    expect(s.statCards).toHaveLength(2)
+    expect(s.statCards[0]).toContain('est1rm')
+    s.statCards[0].push('mutated') // mutating the returned copy must not stick
+    expect((await repo.getSettings()).statCards[0]).not.toContain('mutated')
+
+    await repo.updateSettings({ statCards: [['dots'], ['est1rm']] })
+    expect((await repo.getSettings()).statCards).toEqual([['dots'], ['est1rm']])
+  })
+
+  it('setNotePinned toggles a note pin', async () => {
+    const note = await repo.addNote('belt squats felt great')
+    expect((await db.notes.get(note.id))?.pinned).toBeUndefined()
+    await repo.setNotePinned(note.id, true)
+    expect((await db.notes.get(note.id))?.pinned).toBe(true)
+    await repo.setNotePinned(note.id, false)
+    expect((await db.notes.get(note.id))?.pinned).toBe(false)
+  })
+
   it('deleteDay cascades exercises+setLogs but leaves the week', async () => {
     const w = await repo.addWeek('W')
     const d1 = await repo.addDay(w.id, 'Push')

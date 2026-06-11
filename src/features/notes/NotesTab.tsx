@@ -8,7 +8,7 @@ import { Sheet } from '../../ui/Sheet'
 import { Button } from '../../ui/Button'
 import { PressScale } from '../../ui/PressScale'
 import { haptics } from '../../ui/haptics'
-import { relativeDate } from '../lifts/LiftsTab'
+import { relativeDate } from '../lifts/LiftList'
 
 const SWIPE_REVEAL = 96
 const UNDO_MS = 4000
@@ -112,7 +112,7 @@ function NoteComposer({ onComposingChange }: { onComposingChange: (id: string | 
         value={text}
         onChange={(e) => onChange(e.target.value)}
         onBlur={finalize}
-        placeholder="Jot something — cues, ideas, gym thoughts…"
+        placeholder="Write here"
         aria-label="New note"
         rows={2}
         style={{
@@ -139,23 +139,31 @@ function NoteComposer({ onComposingChange }: { onComposingChange: (id: string | 
   )
 }
 
+type SwipeSide = 'delete' | 'pin' | null
+
 function NoteRow({
   note,
-  swipeOpen,
+  swipeSide,
   onSwipe,
   onEdit,
   onDelete,
+  onTogglePin,
 }: {
   note: Note
-  swipeOpen: boolean
-  onSwipe: (open: boolean) => void
+  swipeSide: SwipeSide
+  onSwipe: (side: SwipeSide) => void
   onEdit: () => void
   onDelete: () => void
+  onTogglePin: () => void
 }) {
   const x = useMotionValue(0)
-  // Tie the delete layer's visibility to the actual swipe offset so it never
+  // Tie each action layer's visibility to the actual swipe offset so neither
   // peeks out from behind the card's rounded corners at rest.
   const deleteOpacity = useTransform(x, [-24, -4], [1, 0])
+  const pinOpacity = useTransform(x, [4, 24], [0, 1])
+
+  const settleTo = (side: SwipeSide) =>
+    animate(x, side === 'delete' ? -SWIPE_REVEAL : side === 'pin' ? SWIPE_REVEAL : 0, SETTLE)
 
   return (
     <motion.div
@@ -166,9 +174,9 @@ function NoteRow({
       transition={{ type: 'spring', stiffness: 380, damping: 32 }}
       style={{ position: 'relative' }}
     >
-      {/* delete affordance behind the card */}
+      {/* delete affordance behind the card (right edge, swipe left) */}
       <motion.div
-        aria-hidden={!swipeOpen}
+        aria-hidden={swipeSide !== 'delete'}
         style={{
           opacity: deleteOpacity,
           position: 'absolute',
@@ -176,13 +184,13 @@ function NoteRow({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'flex-end',
-          pointerEvents: swipeOpen ? 'auto' : 'none',
+          pointerEvents: swipeSide === 'delete' ? 'auto' : 'none',
         }}
       >
         <PressScale
           onClick={onDelete}
           aria-label="Delete note"
-          tabIndex={swipeOpen ? 0 : -1}
+          tabIndex={swipeSide === 'delete' ? 0 : -1}
           style={{
             width: SWIPE_REVEAL - 10,
             alignSelf: 'stretch',
@@ -200,24 +208,65 @@ function NoteRow({
         </PressScale>
       </motion.div>
 
+      {/* pin affordance behind the card (left edge, swipe right) */}
+      <motion.div
+        aria-hidden={swipeSide !== 'pin'}
+        style={{
+          opacity: pinOpacity,
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          pointerEvents: swipeSide === 'pin' ? 'auto' : 'none',
+        }}
+      >
+        <PressScale
+          onClick={onTogglePin}
+          aria-label={note.pinned ? 'Unpin note' : 'Pin note'}
+          tabIndex={swipeSide === 'pin' ? 0 : -1}
+          style={{
+            width: SWIPE_REVEAL - 10,
+            alignSelf: 'stretch',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 16,
+            background: 'var(--accent)',
+            color: 'var(--text)',
+            fontWeight: 700,
+            fontSize: 14,
+          }}
+        >
+          {note.pinned ? 'Unpin' : 'Pin'}
+        </PressScale>
+      </motion.div>
+
       <motion.div
         drag="x"
-        dragConstraints={{ left: -SWIPE_REVEAL, right: 0 }}
-        dragElastic={{ left: 0.12, right: 0 }}
+        dragConstraints={{ left: -SWIPE_REVEAL, right: SWIPE_REVEAL }}
+        dragElastic={{ left: 0.12, right: 0.12 }}
         dragMomentum={false}
         dragDirectionLock
-        animate={{ x: swipeOpen ? -SWIPE_REVEAL : 0 }}
+        animate={{ x: swipeSide === 'delete' ? -SWIPE_REVEAL : swipeSide === 'pin' ? SWIPE_REVEAL : 0 }}
         onDragEnd={(_, info) => {
-          const next = swipeOpen ? info.offset.x < SWIPE_REVEAL / 3 : info.offset.x < -SWIPE_REVEAL / 2
-          if (next !== swipeOpen) haptics.light()
+          let next: SwipeSide
+          if (swipeSide !== null) {
+            // already open: a decent pull back (either way) closes it
+            next = Math.abs(info.offset.x) < SWIPE_REVEAL / 3 ? swipeSide : null
+          } else {
+            next =
+              info.offset.x < -SWIPE_REVEAL / 2 ? 'delete' : info.offset.x > SWIPE_REVEAL / 2 ? 'pin' : null
+          }
+          if (next !== swipeSide) haptics.light()
           onSwipe(next)
           // dragMomentum={false} leaves x where the finger let go — settle explicitly.
-          animate(x, next ? -SWIPE_REVEAL : 0, SETTLE)
+          settleTo(next)
         }}
         onClick={() => {
-          if (swipeOpen) {
-            onSwipe(false)
-            animate(x, 0, SETTLE)
+          if (swipeSide !== null) {
+            onSwipe(null)
+            settleTo(null)
           } else {
             onEdit()
           }
@@ -249,7 +298,13 @@ function NoteRow({
         >
           {note.text}
         </p>
-        <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-faint)' }}>
+        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-faint)' }}>
+          {note.pinned && (
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="var(--accent)" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-label="Pinned">
+              <path d="M12 17v5" />
+              <path d="M9 4h6l-1 7 3 3H7l3-3-1-7z" />
+            </svg>
+          )}
           {relativeDate(note.createdAt)}
         </div>
       </motion.div>
@@ -266,7 +321,7 @@ export function NotesTab() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<Note | null>(null)
   const [draft, setDraft] = useState('')
-  const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null)
+  const [swipeOpen, setSwipeOpen] = useState<{ id: string; side: 'delete' | 'pin' } | null>(null)
   // The composer's in-flight note id — hidden from the list while typing.
   const [composingId, setComposingId] = useState<string | null>(null)
 
@@ -301,9 +356,15 @@ export function NotesTab() {
     setSheetOpen(false)
   }
 
+  const togglePin = async (note: Note) => {
+    haptics.light()
+    setSwipeOpen(null)
+    await repo.setNotePinned(note.id, !note.pinned)
+  }
+
   const deleteWithUndo = async (note: Note) => {
     haptics.warning()
-    setSwipeOpenId(null)
+    setSwipeOpen(null)
     await repo.deleteNote(note.id)
     setUndoNote(note)
     if (undoTimer.current) clearTimeout(undoTimer.current)
@@ -319,7 +380,11 @@ export function NotesTab() {
     haptics.light()
   }
 
-  const visibleNotes = (notes ?? []).filter((n) => n.id !== composingId)
+  // Pinned notes float to the top; sort is stable so createdAt order holds
+  // within each group.
+  const visibleNotes = (notes ?? [])
+    .filter((n) => n.id !== composingId)
+    .sort((a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false))
 
   return (
     <div style={{ paddingTop: 8 }}>
@@ -334,10 +399,11 @@ export function NotesTab() {
             <NoteRow
               key={n.id}
               note={n}
-              swipeOpen={swipeOpenId === n.id}
-              onSwipe={(open) => setSwipeOpenId(open ? n.id : null)}
+              swipeSide={swipeOpen?.id === n.id ? swipeOpen.side : null}
+              onSwipe={(side) => setSwipeOpen(side ? { id: n.id, side } : null)}
               onEdit={() => openEdit(n)}
               onDelete={() => void deleteWithUndo(n)}
+              onTogglePin={() => void togglePin(n)}
             />
           ))}
         </AnimatePresence>

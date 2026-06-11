@@ -7,7 +7,7 @@ import { PlateCalcSheet } from './features/plate-calc/PlateCalcSheet'
 import { SettingsSheet } from './features/settings/SettingsSheet'
 import { LiveWorkout } from './features/live/LiveWorkout'
 import { useLiveStore } from './features/live/liveStore'
-import { LiftsTab } from './features/lifts/LiftsTab'
+import { ProfileTab } from './features/profile/ProfileTab'
 import { LiftDetail } from './features/lifts/LiftDetail'
 import { NotesTab } from './features/notes/NotesTab'
 import { ToastHost } from './ui/Toast'
@@ -39,7 +39,7 @@ function TabContent() {
         }}
       >
         {tab === 'train' && <TrainTab />}
-        {tab === 'lifts' && <LiftsTab />}
+        {tab === 'profile' && <ProfileTab />}
         {tab === 'notes' && <NotesTab />}
       </motion.div>
     </AnimatePresence>

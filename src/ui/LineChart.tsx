@@ -10,8 +10,17 @@ export interface ChartPoint {
   label?: string
 }
 
-interface LineChartProps {
+export interface ChartSeries {
   points: ChartPoint[]
+  /** CSS color (token var) for this series' line + points. */
+  color: string
+}
+
+interface LineChartProps {
+  /** Single-series shorthand (accent color, area fill, glow). */
+  points?: ChartPoint[]
+  /** Multi-series mode: shared scale, one colored line each, no area fill. */
+  series?: ChartSeries[]
   height?: number
   formatY?: (n: number) => string
 }
@@ -42,43 +51,61 @@ function smoothPath(pts: { px: number; py: number }[]): string {
 }
 
 /**
- * Animated SVG line chart: smoothed accent path draws itself in on scroll,
- * gradient area fill, glowing tappable data points, nice-number y grid.
+ * Animated SVG line chart: smoothed path(s) draw themselves in on scroll,
+ * tappable data points, nice-number y grid. Single-series mode keeps the
+ * accent gradient area fill + glow; multi-series mode shares one scale and
+ * draws each series in its own color.
  */
-export function LineChart({ points, height = 180, formatY }: LineChartProps) {
+export function LineChart({ points, series, height = 180, formatY }: LineChartProps) {
   const gradId = useId()
-  const [selected, setSelected] = useState<number | null>(null)
+  const [selected, setSelected] = useState<{ s: number; i: number } | null>(null)
   const H = height
   const fmt = formatY ?? ((n: number) => String(n))
 
-  const { px, scale } = useMemo(() => {
-    const ys = points.map((p) => p.y)
-    const scale = niceScale(Math.min(...ys, Infinity) === Infinity ? 0 : Math.min(...ys), points.length ? Math.max(...ys) : 1, 5)
-    const xs = points.map((p) => p.x)
-    const xLo = Math.min(...xs)
-    const xHi = Math.max(...xs)
+  const multi = series !== undefined
+  const all: ChartSeries[] = useMemo(
+    () => (series ?? [{ points: points ?? [], color: 'var(--accent)' }]).filter((s) => s.points.length > 0),
+    [series, points],
+  )
+
+  const { pxSeries, scale } = useMemo(() => {
+    const ys = all.flatMap((s) => s.points.map((p) => p.y))
+    const xs = all.flatMap((s) => s.points.map((p) => p.x))
+    const scale = niceScale(ys.length ? Math.min(...ys) : 0, ys.length ? Math.max(...ys) : 1, 5)
+    const xLo = xs.length ? Math.min(...xs) : 0
+    const xHi = xs.length ? Math.max(...xs) : 1
     const xSpan = xHi - xLo || 1
     const ySpan = scale.hi - scale.lo || 1
-    const px = points.map((p) => ({
-      px: points.length === 1 ? (PAD_L + W - PAD_R) / 2 : PAD_L + ((p.x - xLo) / xSpan) * (W - PAD_L - PAD_R),
-      py: PAD_T + (1 - (p.y - scale.lo) / ySpan) * (H - PAD_T - PAD_B),
-    }))
-    return { px, scale }
-  }, [points, H])
+    const single = xs.length === 1
+    const pxSeries = all.map((s) =>
+      s.points.map((p) => ({
+        px: single ? (PAD_L + W - PAD_R) / 2 : PAD_L + ((p.x - xLo) / xSpan) * (W - PAD_L - PAD_R),
+        py: PAD_T + (1 - (p.y - scale.lo) / ySpan) * (H - PAD_T - PAD_B),
+      })),
+    )
+    return { pxSeries, scale }
+  }, [all, H])
 
-  if (points.length === 0) return null
+  if (all.length === 0) return null
 
-  const linePath = smoothPath(px)
-  const areaPath = `${linePath} L ${px[px.length - 1].px} ${H - PAD_B} L ${px[0].px} ${H - PAD_B} Z`
-  const sel = selected !== null && selected < points.length ? selected : null
-  const tooltipX = sel !== null ? Math.min(Math.max(px[sel].px, PAD_L + 34), W - PAD_R - 34) : 0
+  const sel =
+    selected !== null &&
+    selected.s < all.length &&
+    selected.i < all[selected.s].points.length
+      ? selected
+      : null
+  const selPx = sel !== null ? pxSeries[sel.s][sel.i] : null
+  const selPoint = sel !== null ? all[sel.s].points[sel.i] : null
+  const tooltipX = selPx !== null ? Math.min(Math.max(selPx.px, PAD_L + 34), W - PAD_R - 34) : 0
+
+  const totalPoints = all.reduce((n, s) => n + s.points.length, 0)
 
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
       style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}
       role="img"
-      aria-label={`Line chart with ${points.length} data points`}
+      aria-label={`Line chart with ${totalPoints} data points${multi ? ` across ${all.length} series` : ''}`}
     >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -107,10 +134,10 @@ export function LineChart({ points, height = 180, formatY }: LineChartProps) {
         )
       })}
 
-      {/* area fill — fades in after the line draws */}
-      {points.length > 1 && (
+      {/* area fill (single-series only) — fades in after the line draws */}
+      {!multi && pxSeries[0].length > 1 && (
         <motion.path
-          d={areaPath}
+          d={`${smoothPath(pxSeries[0])} L ${pxSeries[0][pxSeries[0].length - 1].px} ${H - PAD_B} L ${pxSeries[0][0].px} ${H - PAD_B} Z`}
           fill={`url(#${gradId})`}
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
@@ -119,48 +146,53 @@ export function LineChart({ points, height = 180, formatY }: LineChartProps) {
         />
       )}
 
-      {/* the line draws itself in */}
-      {points.length > 1 && (
-        <motion.path
-          d={linePath}
-          fill="none"
-          stroke="var(--accent)"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          initial={{ pathLength: 0 }}
-          whileInView={{ pathLength: 1 }}
-          viewport={{ once: true, amount: 0.4 }}
-          transition={{ duration: 0.9, ease: 'easeOut' }}
-        />
+      {/* each line draws itself in */}
+      {all.map((s, si) =>
+        pxSeries[si].length > 1 ? (
+          <motion.path
+            key={`line-${si}`}
+            d={smoothPath(pxSeries[si])}
+            fill="none"
+            stroke={s.color}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            initial={{ pathLength: 0 }}
+            whileInView={{ pathLength: 1 }}
+            viewport={{ once: true, amount: 0.4 }}
+            transition={{ duration: 0.9, ease: 'easeOut', delay: multi ? si * 0.12 : 0 }}
+          />
+        ) : null,
       )}
 
       {/* data points spring in, staggered */}
-      {px.map((p, i) => (
-        <motion.circle
-          key={i}
-          cx={p.px}
-          cy={p.py}
-          r={sel === i ? 6 : 4}
-          fill="var(--accent)"
-          stroke="var(--bg)"
-          strokeWidth="2"
-          style={{ filter: 'drop-shadow(0 0 6px var(--accent))', cursor: 'pointer' }}
-          initial={{ scale: 0 }}
-          whileInView={{ scale: 1 }}
-          viewport={{ once: true, amount: 0.4 }}
-          transition={{ delay: 0.25 + Math.min(i * 0.06, 0.8), type: 'spring', stiffness: 380, damping: 22 }}
-          onClick={() => {
-            haptics.light()
-            setSelected(sel === i ? null : i)
-          }}
-        />
-      ))}
+      {all.map((s, si) =>
+        pxSeries[si].map((p, i) => (
+          <motion.circle
+            key={`pt-${si}-${i}`}
+            cx={p.px}
+            cy={p.py}
+            r={sel !== null && sel.s === si && sel.i === i ? 6 : multi ? 3.2 : 4}
+            fill={s.color}
+            stroke="var(--bg)"
+            strokeWidth="2"
+            style={{ filter: multi ? undefined : `drop-shadow(0 0 6px ${s.color})`, cursor: 'pointer' }}
+            initial={{ scale: 0 }}
+            whileInView={{ scale: 1 }}
+            viewport={{ once: true, amount: 0.4 }}
+            transition={{ delay: 0.25 + Math.min(i * 0.06, 0.8), type: 'spring', stiffness: 380, damping: 22 }}
+            onClick={() => {
+              haptics.light()
+              setSelected(sel !== null && sel.s === si && sel.i === i ? null : { s: si, i })
+            }}
+          />
+        )),
+      )}
 
       {/* tooltip pill */}
       <AnimatePresence>
-        {sel !== null && (
+        {sel !== null && selPx !== null && selPoint !== null && (
           <motion.g
-            key={sel}
+            key={`${sel.s}-${sel.i}`}
             initial={{ opacity: 0, y: 6, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.95 }}
@@ -169,7 +201,7 @@ export function LineChart({ points, height = 180, formatY }: LineChartProps) {
           >
             <rect
               x={tooltipX - 38}
-              y={Math.max(2, px[sel].py - 44)}
+              y={Math.max(2, selPx.py - 44)}
               width="76"
               height="32"
               rx="9"
@@ -178,23 +210,23 @@ export function LineChart({ points, height = 180, formatY }: LineChartProps) {
             />
             <text
               x={tooltipX}
-              y={Math.max(2, px[sel].py - 44) + 13.5}
+              y={Math.max(2, selPx.py - 44) + 13.5}
               textAnchor="middle"
               fontSize="11"
               fontWeight="700"
-              fill="var(--text)"
+              fill={multi ? all[sel.s].color : 'var(--text)'}
             >
-              {fmt(points[sel].y)}
+              {fmt(selPoint.y)}
             </text>
             <text
               x={tooltipX}
-              y={Math.max(2, px[sel].py - 44) + 25.5}
+              y={Math.max(2, selPx.py - 44) + 25.5}
               textAnchor="middle"
               fontSize="9"
               fontWeight="600"
               fill="var(--text-dim)"
             >
-              {points[sel].label ?? ''}
+              {selPoint.label ?? ''}
             </text>
           </motion.g>
         )}
