@@ -207,7 +207,27 @@ function blockToExercise(b: Block): ParsedExercise {
 
 export function parseWorkoutPaste(text: string): ParsedWeek[] {
   const lines = text.replace(/\r\n?/g, '\n').split('\n')
+  const bands = splitColumnBands(lines)
+  return bands ? bands.flatMap(parseStrip) : parseStrip(lines)
+}
 
+/** Side-by-side week layout: the first tab-split row holding ≥2 pure-date cells
+ *  defines band start columns; every row is sliced at those columns. */
+function splitColumnBands(lines: string[]): string[][] | null {
+  for (const line of lines) {
+    if (!line.includes('\t')) continue
+    const cells = line.split('\t').map((c) => c.trim())
+    const starts: number[] = []
+    cells.forEach((c, i) => { if (c && parseDateToken(c)) starts.push(i) })
+    if (starts.length < 2) continue
+    if (starts[0] !== 0) starts.unshift(0)
+    return starts.map((start, b) =>
+      lines.map((l) => l.split('\t').slice(start, starts[b + 1]).join('\t')))
+  }
+  return null
+}
+
+function parseStrip(lines: string[]): ParsedWeek[] {
   const weeks: ParsedWeek[] = []
   let week: ParsedWeek | null = null
   let day: ParsedDay | null = null
@@ -397,6 +417,13 @@ function parseDayLine(cell: string): { name: string; date?: string } | null {
   if (combined) {
     const name = canonicalWeekday(combined[1])
     if (name) return { name, date: parseDateToken(combined[2]) ?? undefined }
+  }
+  // "Thursday/Friday" — a flexible two-day slot; keep the combined name, no date
+  const dual = t.match(/^([A-Za-z]+)\s*\/\s*([A-Za-z]+)$/)
+  if (dual) {
+    const a = canonicalWeekday(dual[1])
+    const b = canonicalWeekday(dual[2])
+    if (a && b) return { name: `${a}/${b}` }
   }
   const name = canonicalWeekday(t)
   return name ? { name } : null

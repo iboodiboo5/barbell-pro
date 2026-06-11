@@ -1,21 +1,23 @@
 import { useId } from 'react'
 import { motion } from 'motion/react'
+import { plateToKg, type PlateSel } from '../../lib/plateMath'
 
 interface BarGraphicProps {
-  /** Plates loaded on each side, kg, sorted heaviest-first (from computePlates). */
-  perSide: number[]
+  /** Plates loaded on each side, sorted heaviest-first by kg-equivalent. */
+  perSide: PlateSel[]
   barWeightKg: number
 }
 
-/** IPF color-coding token for a plate denomination (kg). */
-export function plateColor(denom: number): string {
-  if (denom === 25) return 'var(--plate-25)'
-  if (denom === 20) return 'var(--plate-20)'
-  if (denom === 15) return 'var(--plate-15)'
-  if (denom === 10) return 'var(--plate-10)'
-  if (denom === 5) return 'var(--plate-5)'
-  if (denom === 2.5) return 'var(--plate-2-5)'
-  if (denom === 1.25) return 'var(--plate-1-25)'
+/** IPF color-coding token for a kg denomination; lb plates are iron gray. */
+export function plateColor(value: number, unit: 'kg' | 'lb' = 'kg'): string {
+  if (unit === 'lb') return 'var(--plate-lb)'
+  if (value === 25) return 'var(--plate-25)'
+  if (value === 20) return 'var(--plate-20)'
+  if (value === 15) return 'var(--plate-15)'
+  if (value === 10) return 'var(--plate-10)'
+  if (value === 5) return 'var(--plate-5)'
+  if (value === 2.5) return 'var(--plate-2-5)'
+  if (value === 1.25) return 'var(--plate-1-25)'
   return 'var(--text-faint)'
 }
 
@@ -63,19 +65,20 @@ export function BarGraphic({ perSide, barWeightKg }: BarGraphicProps) {
   const sleeveGrad = `${uid}-sleeve`
 
   // Lay plates along the sleeve from the collar outward; squeeze widths if a
-  // monster load would overflow the sleeve.
-  const dims = perSide.map(plateDims)
+  // monster load would overflow the sleeve. Sizing keys off kg-equivalent so
+  // lb plates land between their kg neighbours (45 lb just under 20 kg).
+  const dims = perSide.map((p) => plateDims(p.unit === 'kg' ? p.value : plateToKg(p)))
   const natural =
     dims.reduce((s, d) => s + d.w, 0) + PLATE_GAP * Math.max(0, perSide.length - 1)
   const usable = SLEEVE_LEN - 12 // keep a stub of bare sleeve at the tip
   const squeeze = natural > usable ? usable / natural : 1
 
   let cursor = 0
-  const slots = perSide.map((denom, i) => {
+  const slots = perSide.map((plate, i) => {
     const w = dims[i].w * squeeze
     const offset = cursor
     cursor += w + PLATE_GAP * squeeze
-    return { denom, w, h: dims[i].h, offset, i }
+    return { plate, w, h: dims[i].h, offset, i }
   })
 
   const shaftX1 = SLEEVE_LEN + COLLAR_W
@@ -84,7 +87,7 @@ export function BarGraphic({ perSide, barWeightKg }: BarGraphicProps) {
   const label =
     perSide.length === 0
       ? `Empty ${barWeightKg} kg bar`
-      : `${barWeightKg} kg bar loaded with ${perSide.join(', ')} kg per side`
+      : `${barWeightKg} kg bar loaded with ${perSide.map((p) => `${p.value} ${p.unit}`).join(', ')} per side`
 
   return (
     <svg
@@ -135,8 +138,9 @@ export function BarGraphic({ perSide, barWeightKg }: BarGraphicProps) {
       </text>
 
       {/* plates — mirrored, innermost seated against the collar */}
-      {slots.map(({ denom, w, h, offset, i }) => {
-        const fill = plateColor(denom)
+      {slots.map(({ plate, w, h, offset, i }) => {
+        const denom = `${plate.value}${plate.unit}`
+        const fill = plateColor(plate.value, plate.unit)
         const rx = Math.min(4, w / 2.4)
         const y = CY - h / 2
         const leftX = SLEEVE_LEN - offset - w

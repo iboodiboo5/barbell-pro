@@ -407,3 +407,62 @@ describe('parseWorkoutPaste — structure variants', () => {
     expect(weeks[0].days[0].exercises[0].name).toBe('Squat')
   })
 })
+
+describe('parseWorkoutPaste — column-banded pastes (weeks side by side)', () => {
+  // Bands start at the columns of the ≥2 pure-date cells in the first date row.
+  const W = 5 // band width in cells
+  const band = (...cells: string[]) => {
+    const c = [...cells]
+    while (c.length < W) c.push('')
+    return c
+  }
+  const row = (...bands: string[][]) => bands.flat().join('\t')
+
+  const BANDED = [
+    row(band('03/11/2025'), band('10/11/2025'), band('08/12/2025')),
+    row(band('Monday', '', '', '', '09/11, I felt very weak'), band('Monday'), band('Wenesday')),
+    row(band('Rear Delt Flyes', '55', '3', '12'), band('Bench', '70', '5', '5'), band('Deadlift', 'Load', 'Sets', 'Reps')),
+    row(band(''), band(''), band('', '110', '5', '4')),
+    row(band('Tuesday'), band('17/11/2025'), band('Thursday/Friday')),
+    row(band('Squat', '100', '3', '5'), band('Monday'), band('Bike', '', '1', '5m')),
+    row(band(''), band('Bench', '72.5', '5', '5'), band('')),
+  ].join('\n')
+
+  it('splits bands into separate weeks, left band first', () => {
+    const weeks = parseWorkoutPaste(BANDED)
+    expect(weeks.map((w) => w.date)).toEqual([
+      '2025-11-03', '2025-11-10', '2025-11-17', '2025-12-08',
+    ])
+  })
+
+  it('keeps stacked weeks inside one band separate', () => {
+    const weeks = parseWorkoutPaste(BANDED)
+    expect(weeks[1].days[0].exercises[0]).toMatchObject({ name: 'Bench', loadKg: 70 })
+    expect(weeks[2].days[0].exercises[0]).toMatchObject({ name: 'Bench', loadKg: 72.5 })
+  })
+
+  it('parses each band with full single-strip behavior', () => {
+    const weeks = parseWorkoutPaste(BANDED)
+    expect(weeks[0].days.map((d) => d.name)).toEqual(['Monday', 'Tuesday'])
+    expect(weeks[0].days[0].date).toBe('2025-11-03')
+    expect(weeks[3].days.map((d) => d.name)).toEqual(['Wednesday', 'Thursday/Friday'])
+    expect(weeks[3].days[0].exercises[0]).toMatchObject({ name: 'Deadlift', loadKg: 110, sets: 5, reps: 4 })
+  })
+
+  it('does not band a vertical paste with one date per row', () => {
+    const TWO_DATES = [
+      '03/11/2025',
+      L('Squat', '100', '3', '5'),
+      '10/11/2025',
+      L('Squat', '102.5', '3', '5'),
+    ].join('\n')
+    const weeks = parseWorkoutPaste(TWO_DATES)
+    expect(weeks).toHaveLength(2)
+    expect(weeks[1].days[0].exercises[0].loadKg).toBe(102.5)
+  })
+
+  it('parses "Thursday/Friday" as a single day header', () => {
+    const weeks = parseWorkoutPaste(['Thursday/Friday', L('Bike', '', '1', '5m')].join('\n'))
+    expect(weeks[0].days[0].name).toBe('Thursday/Friday')
+  })
+})

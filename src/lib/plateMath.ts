@@ -37,6 +37,45 @@ export function computePlates(
   return { perSide, achieved, remainder }
 }
 
+// ─── mixed-unit plate stacks (interactive calculator) ───────────────────────
+
+/** One physical plate on the bar (per side). */
+export interface PlateSel { value: number; unit: 'kg' | 'lb' }
+
+export const KG_PER_LB = 0.45359237
+
+/** Standard lb denominations for mixed-plate gyms. */
+export const LB_PLATES = [45, 35, 25, 10, 5, 2.5]
+
+export const plateToKg = (p: PlateSel): number =>
+  p.unit === 'lb' ? p.value * KG_PER_LB : p.value
+
+/** Bar + 2 × per-side kg-equivalents. */
+export function stackTotalKg(barWeightKg: number, perSide: PlateSel[]): number {
+  return barWeightKg + 2 * perSide.reduce((s, p) => s + plateToKg(p), 0)
+}
+
+/** Greedy kg suggestion for a target, as an editable stack. */
+export function autoStack(targetKg: number, barWeightKg: number, platesKg: number[]): PlateSel[] {
+  return computePlates(targetKg, barWeightKg, platesKg).perSide
+    .map((value) => ({ value, unit: 'kg' as const }))
+}
+
+/** New stack with `plate` inserted, kept heaviest-first by kg-equivalent. */
+export function insertPlate(perSide: PlateSel[], plate: PlateSel): PlateSel[] {
+  const out = [...perSide]
+  const kg = plateToKg(plate)
+  const i = out.findIndex((p) => plateToKg(p) < kg)
+  out.splice(i === -1 ? out.length : i, 0, plate)
+  return out
+}
+
+/** New stack with the first plate matching value+unit removed. */
+export function removePlate(perSide: PlateSel[], plate: PlateSel): PlateSel[] {
+  const i = perSide.findIndex((p) => p.value === plate.value && p.unit === plate.unit)
+  return i === -1 ? [...perSide] : [...perSide.slice(0, i), ...perSide.slice(i + 1)]
+}
+
 /** Convert kilograms to pounds. */
 export const kgToLbs = (kg: number): number => kg * 2.20462
 

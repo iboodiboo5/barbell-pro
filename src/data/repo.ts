@@ -88,6 +88,9 @@ export const repo = {
             plannedLoad: ex.plannedLoad,
             plannedSets: ex.plannedSets,
             plannedReps: ex.plannedReps,
+            // verbatim coach-sheet display values; omit the keys when unset
+            ...(ex.loadText !== undefined ? { loadText: ex.loadText } : {}),
+            ...(ex.repsText !== undefined ? { repsText: ex.repsText } : {}),
             remarks: [...ex.remarks],
             order: ex.order,
             updatedAt: now(),

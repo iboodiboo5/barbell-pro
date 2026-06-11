@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { computePlates, kgToLbs, lbsToKg, formatWeight } from './plateMath'
+import {
+  computePlates, kgToLbs, lbsToKg, formatWeight,
+  plateToKg, stackTotalKg, autoStack, insertPlate, removePlate,
+} from './plateMath'
 
 const PLATES = [25, 20, 15, 10, 5, 2.5, 1.25]
 
@@ -63,5 +66,40 @@ describe('formatWeight', () => {
   })
   it('strips trailing .0 suffix in kg', () => {
     expect(formatWeight(20, 'kg')).toBe('20 kg')
+  })
+})
+
+describe('mixed-unit plate stacks', () => {
+  it('plateToKg converts lb exactly and passes kg through', () => {
+    expect(plateToKg({ value: 45, unit: 'lb' })).toBeCloseTo(20.41165665, 6)
+    expect(plateToKg({ value: 25, unit: 'kg' })).toBe(25)
+  })
+  it('stackTotalKg sums bar + both sides', () => {
+    const stack = [{ value: 20, unit: 'kg' as const }, { value: 45, unit: 'lb' as const }]
+    expect(stackTotalKg(20, stack)).toBeCloseTo(20 + 2 * (20 + 45 * 0.45359237), 6)
+  })
+  it('autoStack mirrors computePlates as kg plates', () => {
+    expect(autoStack(100, 20, PLATES)).toEqual([
+      { value: 25, unit: 'kg' }, { value: 15, unit: 'kg' },
+    ])
+  })
+  it('insertPlate keeps the stack sorted heaviest-first by kg-equivalent', () => {
+    const s1 = insertPlate([], { value: 10, unit: 'kg' })
+    const s2 = insertPlate(s1, { value: 45, unit: 'lb' }) // ≈20.4 kg → goes first
+    expect(s2).toHaveLength(2)
+    expect(s2[0]).toEqual({ value: 45, unit: 'lb' })
+    expect(s2[1]).toEqual({ value: 10, unit: 'kg' })
+    expect(s1).toHaveLength(1) // input not mutated
+  })
+  it('removePlate removes one matching plate only', () => {
+    const stack = [
+      { value: 5, unit: 'lb' as const },
+      { value: 5, unit: 'kg' as const },
+      { value: 5, unit: 'lb' as const },
+    ]
+    const out = removePlate(stack, { value: 5, unit: 'lb' })
+    expect(out).toHaveLength(2)
+    expect(out.filter((p) => p.unit === 'lb')).toHaveLength(1)
+    expect(stack).toHaveLength(3) // input not mutated
   })
 })
